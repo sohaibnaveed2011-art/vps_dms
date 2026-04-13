@@ -23,7 +23,7 @@ services:
     working_dir: /app
     # REMOVED: - ./:/app (Use the code baked into the image)
     ports:
-      - "9010:8000"
+      - "8000:8000"
     environment:
       - APP_ENV=production
       - APP_DEBUG=false
