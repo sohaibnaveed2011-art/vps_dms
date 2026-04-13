@@ -1,0 +1,23 @@
+# Ignore Git metadata
+.git
+.github
+
+# Ignore local environment files (Inject these via Compose instead)
+.env
+.env.example
+
+# Ignore local dependencies (Let the Dockerfile run composer/npm install)
+node_modules
+vendor
+
+# Ignore local data persistence folders
+docker-networks/
+infrastructure/
+*_data/
+
+# Ignore documentation and logs
+README.md
+.dockerignore
+Dockerfile
+docker-compose.yml
+storage/logs/*.log
