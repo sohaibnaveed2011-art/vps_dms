@@ -1,41 +1,63 @@
 services:
-  # Main Laravel App
+  admin_db:
+    image: mysql:8.0
+    container_name: ${DB_CONTAINER:-epos-db-rest2}
+    restart: always
+    environment:
+      MYSQL_DATABASE: ${DB_NAME:-dms}
+      MYSQL_USER: ${DB_USER:-eposuser}
+      MYSQL_PASSWORD: ${DB_PASS:-epospass}
+      MYSQL_ROOT_PASSWORD: ${ROOT_PASS:-rootpass}
+    volumes:
+      - dbdata:/var/lib/mysql
+    networks:
+      - epos-net
+
   admin:
     build: .
     container_name: dms_admin_app
-    restart: unless-stopped
+    restart: always
     tty: true
     working_dir: /app
     volumes:
       - ./:/app
-      - node_modules:/app/node_modules
     ports:
       - "8000:8000"
-      - "5173:5173"
     environment:
-      - CHOKIDAR_USEPOLLING=true
+      DB_HOST: ${DB_CONTAINER:-epos-db-rest2}
+      DB_PORT: 3306
+      DB_DATABASE: ${DB_NAME:-dms}
+      DB_USERNAME: ${DB_USER:-eposuser}
+      DB_PASSWORD: ${DB_PASS:-epospass}
+      APP_ENV: production
+      APP_DEBUG: "false"
+    depends_on:
+      - admin_db
     networks:
-      - nginx-proxy-network
-      - microservices-network
+      - epos-net
 
-  # Laravel Queue Worker
   admin_queue:
     build: .
     container_name: dms_admin_queue
-    restart: unless-stopped
-    working_dir: /app
-    command: php artisan queue:work --tries=1
+    restart: always
+    command: php artisan queue:work --tries=3 --timeout=90
     volumes:
       - ./:/app
+    environment:
+      DB_HOST: ${DB_CONTAINER:-epos-db-rest2}
+      DB_PORT: 3306
+      DB_DATABASE: ${DB_NAME:-dms}
+      DB_USERNAME: ${DB_USER:-eposuser}
+      DB_PASSWORD: ${DB_PASS:-epospass}
+    depends_on:
+      - admin_db
     networks:
-      - nginx-proxy-network
-      - microservices-network
+      - epos-net
 
 networks:
-  nginx-proxy-network:
-    external: true
-  microservices-network:
+  epos-net:
     external: true
 
 volumes:
-  node_modules:
+  dbdata:
+    driver: local
