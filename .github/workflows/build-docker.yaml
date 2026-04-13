@@ -1,0 +1,17 @@
+name: "Build and Publish Image to Docker Hub"
+on:
+  [workflow_dispatch]
+
+jobs:
+  publish_images:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Docker Image
+        uses: docker build . -t sohaib2naveed/vps_dms:v1
+      - name: Pull image to docker hub
+        run: [
+          docker push sohaib2naveed/vps_dms:v1
+        ]
