@@ -1,0 +1,4891 @@
+<?php
+
+namespace App\Services\Audit;
+
+use App\Models\AuditLog;
+use Illuminate\Database\Eloquent\Model;
+
+class AuditLogger
+{
+    public static function log(
+        ?int $userId,
+        string $event,
+        ?Model $target = null,
+        array $meta = []
+    ): void {
+
+        AuditLog::create([
+            'user_id' => $userId,
+            'event_type' => $event,
+            'auditable_type' => $target?->getMorphClass(),
+            'auditable_id' => $target?->getKey(),
+            'meta' => $meta,
+        ]);
+    }
+}
+<?php
+
+namespace App\Services\Auth;
+
+use App\Contracts\ContextScope;
+use App\Exceptions\ForbiddenException;
+use App\Guards\AuthorityGuard;
+use App\Guards\LocationOperationGuard;
+use App\Models\Auth\UserAssignment;
+use App\Models\User;
+use App\Services\Audit\AuditLogger;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
+
+class AuthorizationService
+{
+    public function __construct(
+        protected AuthorityGuard $authorityGuard
+    ) {}
+
+    /* =========================================================
+     | AUTHORIZE WRAPPER
+     ========================================================= */
+
+    public function authorize(
+        User $user,
+        string $permission,
+        ?Model $target = null,
+    ): void {
+
+        if (! $this->can($user, $permission, $target)) {
+
+            AuditLogger::log(
+                $user->id,
+                'authorization_denied',
+                $target,
+                ['permission' => $permission]
+            );
+
+            throw new ForbiddenException('Unauthorized.');
+        }
+    }
+
+    /* =========================================================
+     | CORE CHECK
+     ========================================================= */
+
+    public function can(
+        User $user,
+        string $permission,
+        ?Model $target = null
+    ): bool {
+
+        if ($user->is_admin) {
+            return true;
+        }
+
+        $context = $user->activeContext();
+
+        if (! $context) {
+            return false;
+        }
+
+        $assignments = $this->activeAssignments($user);
+
+        $validRoles = [];
+
+        foreach ($assignments as $assignment) {
+
+            if (! $assignment->role->hasPermissionTo($permission)) {
+                continue;
+            }
+
+            if (! $this->matchesScope($assignment, $target)) {
+                continue;
+            }
+
+            $validRoles[] = $assignment->role_id;
+        }
+
+        if (empty($validRoles)) {
+            return false;
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | 🔐 AUTOMATIC AUTHORITY OVERLAY (VOUCHER REVIEW / APPROVE ONLY)
+        |--------------------------------------------------------------------------
+        */
+
+        $params = $this->resolveAuthorityParams($permission);
+
+        $requiresAuthority =
+            $params['domain'] === 'vouchers' &&
+            in_array($params['action'], ['review', 'approve']);
+
+        if ($requiresAuthority) {
+
+            $subject = "{$params['domain']}.{$params['subject']}";
+            $action  = $params['action'];
+            $voucherType = $params['subject']; // auto-derived
+
+            try {
+                $this->authorityGuard->enforce(
+                    $user,
+                    $subject,
+                    $action,
+                    $target,
+                    $voucherType,
+                    $validRoles
+                );
+            } catch (ForbiddenException) {
+                return false;
+            }
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | 📍 CONTEXT LOCATION BOUNDARY ENFORCEMENT
+        |--------------------------------------------------------------------------
+        */
+
+        if ($target instanceof ContextScope) {
+            if (! LocationOperationGuard::canOperateOn($user, $target)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /* =========================================================
+     | ACTIVE ASSIGNMENTS (CACHED)
+     ========================================================= */
+
+    protected function activeAssignments(User $user): Collection
+    {
+        $context = $user->activeContext();
+
+        if (! $context) {
+            return collect();
+        }
+
+        $cacheKey = implode(':', [
+            'user',
+            $user->id,
+            'assignments',
+            $context->organization_id,
+            $context->branch_id ?? 'null',
+            $context->warehouse_id ?? 'null',
+            $context->outlet_id ?? 'null',
+        ]);
+
+        return Cache::tags([
+            "user:{$user->id}",
+            "org:{$context->organization_id}"
+        ])->remember($cacheKey, now()->addMinutes(10), function () use ($user, $context) {
+
+            $hierarchyIds = array_filter([
+                'organization' => $context->organization_id,
+                'branch'       => $context->branch_id,
+                'warehouse'    => $context->warehouse_id,
+                'outlet'       => $context->outlet_id,
+            ]);
+
+            return UserAssignment::query()
+                ->where('user_id', $user->id)
+                ->whereNull('ended_at')
+                ->where(function ($q) use ($hierarchyIds) {
+                    foreach ($hierarchyIds as $type => $id) {
+                        $q->orWhere(function ($sub) use ($type, $id) {
+                            $sub->where('assignable_type', $type)
+                                ->where('assignable_id', $id);
+                        });
+                    }
+                })
+                ->with('role.permissions')
+                ->get();
+        });
+    }
+
+    /* =========================================================
+     | ASSIGNMENT SCOPE MATCHING
+     ========================================================= */
+
+    protected function matchesScope(UserAssignment $assignment, ?Model $target): bool
+    {
+        if (! $target instanceof ContextScope) {
+            return true;
+        }
+
+        $hierarchy = [
+            'outlet'       => $target->outletId(),
+            'warehouse'    => $target->warehouseId(),
+            'branch'       => $target->branchId(),
+            'organization' => $target->organizationId(),
+        ];
+
+        foreach ($hierarchy as $type => $id) {
+            if ($id &&
+                $assignment->assignable_type === $type &&
+                $assignment->assignable_id === $id
+            ) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /* =========================================================
+     | PERMISSION PARSER
+     ========================================================= */
+
+    protected function resolveAuthorityParams(string $permission): array
+    {
+        $parts = explode('.', $permission);
+
+        return [
+            'domain'  => $parts[0] ?? null,
+            'subject' => $parts[1] ?? null,
+            'action'  => $parts[2] ?? null,
+        ];
+    }
+
+    /* =========================================================
+     | TOKEN ABILITY RESOLUTION
+     ========================================================= */
+
+    public function resolveTokenAbilities(User $user): array
+    {
+        // 🔥 Admin always gets full abilities
+        if ($user->is_admin) {
+            return ['*'];
+        }
+
+        $context = $user->activeContext();
+
+        if (! $context) {
+            return [];
+        }
+
+        $assignments = $this->activeAssignments($user);
+
+        $domains = collect();
+
+        foreach ($assignments as $assignment) {
+            foreach ($assignment->role->permissions as $permission) {
+
+                $parts = explode('.', $permission->name);
+
+                if (! empty($parts[0])) {
+                    $domains->push($parts[0]);
+                }
+            }
+        }
+
+        return $domains
+            ->unique()
+            ->map(fn ($domain) => "{$domain}.*")
+            ->values()
+            ->toArray();
+    }
+}
+<?php
+
+namespace App\Services\Auth;
+
+use App\Http\Resources\Auth\UserResource;
+use App\Models\Auth\UserAssignment;
+use App\Models\User;
+use Illuminate\Auth\Events\PasswordReset;
+use Illuminate\Contracts\Auth\Authenticatable;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Password;
+use Illuminate\Support\Str;
+use InvalidArgumentException;
+use Laravel\Sanctum\PersonalAccessToken;
+use RuntimeException;
+
+class AuthService
+{
+    public function __construct(
+        private AuthorizationService $authorizationService,
+        private UserContextService $contextService
+    ) {}
+
+    /* =========================================================
+     | INTERNAL HELPERS
+     ========================================================= */
+
+    protected function makeResource(
+        Authenticatable|Model $user
+    ): UserResource {
+
+        $user->loadMissing([
+            'userAssignments.role.permissions',
+            'userContexts',
+        ]);
+
+        return new UserResource($user->refresh());
+    }
+
+    /**
+     * Context is required ONLY for non-admin users
+     */
+    protected function ensureContextExists(User $user): void
+    {
+        if ($user->is_admin) {
+            return; // 🔥 HARD ADMIN BYPASS
+        }
+
+        if (! $user->activeContext()) {
+            throw new RuntimeException('No active context selected.');
+        }
+    }
+
+    protected function revokeAllTokens(User $user): void
+    {
+        $user->tokens()->delete();
+    }
+
+    /* =========================================================
+     | TOKEN ISSUANCE
+     ========================================================= */
+
+    public function issuePreContextToken(User $user): string
+    {
+        $this->revokeAllTokens($user);
+
+        return $user
+            ->createToken('pre-context-token', ['context.select'])
+            ->plainTextToken;
+    }
+
+    public function issueContextToken(User $user): string
+    {
+        // 🔥 Admin never needs context
+        if ($user->is_admin) {
+            $this->revokeAllTokens($user);
+
+            return $user
+                ->createToken('system-token', ['*'])
+                ->plainTextToken;
+        }
+
+        $this->ensureContextExists($user);
+
+        $this->revokeAllTokens($user);
+
+        $abilities = $this->authorizationService
+            ->resolveTokenAbilities($user);
+
+        return $user
+            ->createToken('context-token', $abilities)
+            ->plainTextToken;
+    }
+
+    /* =========================================================
+     | LOGIN
+     ========================================================= */
+
+    public function login(
+        string $email,
+        string $password
+    ): array {
+
+        $user = User::where('email', $email)->first();
+
+        if (! $user || ! Hash::check($password, $user->password)) {
+            throw new InvalidArgumentException('Invalid credentials.');
+        }
+
+        if (! $user->is_active) {
+            throw new RuntimeException('Account disabled.');
+        }
+
+        /*
+        |----------------------------------------------------------------------
+        | 🔥 SYSTEM ADMIN (FULL BYPASS)
+        |----------------------------------------------------------------------
+        */
+
+        if ($user->is_admin) {
+
+            $this->revokeAllTokens($user);
+
+            return [
+                'token' => $user
+                    ->createToken('system-token', ['*'])
+                    ->plainTextToken,
+                'user' => $this->makeResource($user),
+                'context_required' => false,
+            ];
+        }
+
+        /*
+        |----------------------------------------------------------------------
+        | 🔍 BUSINESS USER
+        |----------------------------------------------------------------------
+        */
+
+        $assignments = UserAssignment::query()
+            ->with('assignable') // 🔥 REQUIRED for org resolution
+            ->where('user_id', $user->id)
+            ->whereNull('ended_at')
+            ->get();
+
+        if ($assignments->isEmpty()) {
+            throw new RuntimeException(
+                'No active role assigned. Please contact administrator.'
+            );
+        }
+
+        /*
+        |----------------------------------------------------------------------
+        | AUTO CONTEXT IF SINGLE ASSIGNMENT
+        |----------------------------------------------------------------------
+        */
+
+        if ($assignments->count() === 1) {
+
+            if (! $user->activeContext()) {
+
+                $this->contextService->switchByAssignment(
+                    $user,
+                    $assignments->first()->id
+                );
+
+                $user->refresh();
+            }
+
+            return [
+                'token' => $this->issueContextToken($user),
+                'user' => $this->makeResource($user),
+                'context_required' => false,
+            ];
+        }
+
+        /*
+        |----------------------------------------------------------------------
+        | 🔥 UPDATED: SMART AUTO CONTEXT RESOLUTION
+        |----------------------------------------------------------------------
+        | If multiple assignments:
+        | 1. Group by organization
+        | 2. If only ONE organization → auto-pick highest scope
+        | 3. If multiple organizations → require manual selection
+        */
+
+        // 🔥 Group assignments by organization
+        $groupedByOrg = $assignments->groupBy(function ($assignment) {
+
+            // Organization assignment has no organization_id property
+            if ($assignment->assignable_type === 'organization') {
+                return $assignment->assignable_id;
+            }
+
+            return $assignment->assignable->organization_id;
+        });
+
+        // ✅ If user belongs to ONLY ONE organization
+        if ($groupedByOrg->count() === 1) {
+
+            // 🔥 Scope priority (highest first)
+            $priority = [
+                'organization' => 1,
+                'branch' => 2,
+                'warehouse' => 3,
+                'outlet' => 4,
+            ];
+
+            // Select highest-level scope
+            $selectedAssignment = $assignments
+                ->sortBy(fn ($a) => $priority[$a->assignable_type] ?? 999)
+                ->first();
+
+            // Switch context automatically
+            $this->contextService->switchByAssignment(
+                $user,
+                $selectedAssignment->id
+            );
+
+            $user->refresh();
+
+            return [
+                'token' => $this->issueContextToken($user),
+                'user' => $this->makeResource($user),
+                'context_required' => false,
+            ];
+        }
+
+        /*
+        |----------------------------------------------------------------------
+        | MULTIPLE ORGANIZATIONS → MANUAL CONTEXT REQUIRED
+        |----------------------------------------------------------------------
+        */
+
+        return [
+            'token' => $this->issuePreContextToken($user),
+            'user' => $this->makeResource($user),
+            'context_required' => true,
+        ];
+    }
+
+    /* =========================================================
+     | LOGOUT
+     ========================================================= */
+
+    public function logout(): void
+    {
+        $user = Auth::user();
+
+        if (! $user) {
+            return;
+        }
+
+        $token = $user->currentAccessToken();
+
+        if ($token instanceof PersonalAccessToken) {
+            $token->delete();
+        }
+    }
+
+    /* =========================================================
+     | PASSWORD RESET
+     ========================================================= */
+
+    public function sendResetLink(string $email): string
+    {
+        return Password::sendResetLink(['email' => $email]);
+    }
+
+    public function resetPassword(array $data): string
+    {
+        return Password::reset($data, function (User $user, $password) {
+
+            $user->password = Hash::make($password);
+            $user->setRememberToken(Str::random(60));
+            $user->save();
+
+            event(new PasswordReset($user));
+        });
+    }
+
+    /* =========================================================
+     | PROFILE
+     ========================================================= */
+
+    public function profile(User $user): UserResource
+    {
+        return $this->makeResource($user);
+    }
+}
+<?php
+
+namespace App\Services\Auth;
+
+use Illuminate\Database\Eloquent\Model;
+use RuntimeException;
+
+class ContextHierarchyResolver
+{
+    public function resolve(Model $assignable): array
+    {
+        return match ($assignable->getMorphClass()) {
+
+            'organization' => [
+                'organization_id' => $assignable->id,
+                'branch_id' => null,
+                'warehouse_id' => null,
+                'outlet_id' => null,
+                'path' => ['organization'],
+            ],
+
+            'branch' => [
+                'organization_id' => $assignable->organization_id,
+                'branch_id' => $assignable->id,
+                'warehouse_id' => null,
+                'outlet_id' => null,
+                'path' => ['organization', 'branch'],
+            ],
+
+            'warehouse' => [
+                'organization_id' => $assignable->organization_id,
+                'branch_id' => $assignable->branch_id,
+                'warehouse_id' => $assignable->id,
+                'outlet_id' => null,
+                'path' => ['organization', 'branch', 'warehouse'],
+            ],
+
+            'outlet' => [
+                'organization_id' => $assignable->organization_id,
+                'branch_id' => $assignable->branch_id,
+                'warehouse_id' => $assignable->warehouse_id,
+                'outlet_id' => $assignable->id,
+                'path' => ['organization', 'branch', 'warehouse', 'outlet'],
+            ],
+
+            default => throw new RuntimeException(
+                'Unsupported assignable type.'
+            ),
+        };
+    }
+}
+<?php
+
+namespace App\Services\Auth;
+
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Spatie\Permission\Models\Permission;
+
+class PermissionService
+{
+    /**
+     * List permissions.
+     *
+     * Permissions are SYSTEM-LEVEL and STATIC.
+     */
+    public function list(array $filters = [], int $perPage = 50): LengthAwarePaginator
+    {
+        $query = Permission::query();
+
+        if (! empty($filters['q'])) {
+            $query->where('name', 'like', '%'.$filters['q'].'%');
+        }
+
+        return $query->orderBy('name')->paginate($perPage);
+    }
+
+    /**
+     * Find permission.
+     */
+    public function find(int $id): ?Permission
+    {
+        return Permission::find($id);
+    }
+
+    /**
+     * Create permission.
+     *
+     * ⚠ SYSTEM ADMIN ONLY
+     * ⚠ Normally seeded, not UI-created
+     */
+    public function create(array $data): Permission
+    {
+        return Permission::create([
+            'name'       => $data['name'],
+            'guard_name' => $data['guard_name'] ?? 'web',
+        ]);
+    }
+
+    /**
+     * Update permission.
+     *
+     * ⚠ Strongly discouraged in production
+     */
+    public function update(Permission $permission, array $data): Permission
+    {
+        $permission->update([
+            'name' => $data['name'],
+        ]);
+
+        return $permission->refresh();
+    }
+
+    /**
+     * Delete permission.
+     *
+     * ⚠ Usually disabled in production
+     */
+    public function delete(Permission $permission): void
+    {
+        $permission->delete();
+    }
+}
+<?php
+
+namespace App\Services\Auth;
+
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Spatie\Permission\Models\Role;
+use Spatie\Permission\Models\Permission;
+
+class RoleService
+{
+    /**
+     * List roles (system-wide).
+     */
+    public function list(array $filters = [], int $perPage = 15): LengthAwarePaginator
+    {
+        $query = Role::query();
+
+        if (! empty($filters['q'])) {
+            $query->where('name', 'like', '%'.$filters['q'].'%');
+        }
+
+        return $query->orderBy('name')->paginate($perPage);
+    }
+
+    /**
+     * Find role by ID.
+     */
+    public function find(int $id): ?Role
+    {
+        return Role::find($id);
+    }
+
+    /**
+     * Create new role.
+     *
+     * NOTE:
+     * - Roles are SYSTEM objects
+     * - They are NOT assigned directly to users
+     */
+    public function create(array $data): Role
+    {
+        return Role::create([
+            'name'       => $data['name'],
+            'guard_name' => $data['guard_name'] ?? 'web',
+        ]);
+    }
+
+    /**
+     * Update role.
+     */
+    public function update(Role $role, array $data): Role
+    {
+        $role->update([
+            'name' => $data['name'],
+        ]);
+
+        return $role->refresh();
+    }
+
+    /**
+     * Delete role.
+     *
+     * NOTE:
+     * - Do NOT allow deleting super_admin
+     */
+    public function delete(Role $role): void
+    {
+        if ($role->name === 'admin') {
+            abort(403, 'admin role cannot be deleted');
+        }
+
+        $role->delete();
+    }
+
+    /**
+     * Sync permissions with role.
+     *
+     * SINGLE SOURCE OF TRUTH
+     */
+    public function syncPermissions(Role $role, array $permissionNames): Role
+    {
+        $permissions = Permission::whereIn('name', $permissionNames)->get();
+
+        if ($permissions->count() !== count($permissionNames)) {
+            abort(422, 'One or more permissions are invalid');
+        }
+
+        $role->syncPermissions($permissions);
+
+        return $role->refresh();
+    }
+}
+<?php
+
+namespace App\Services\Auth;
+
+use App\Models\Auth\UserAssignment;
+use App\Models\User;
+use App\Services\Audit\AuditLogger;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Database\Eloquent\Relations\Relation;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+use InvalidArgumentException;
+use RuntimeException;
+use Spatie\Permission\Models\Role;
+
+class UserAssignmentService
+{
+    /*
+    |--------------------------------------------------------------------------
+    | LISTING
+    |--------------------------------------------------------------------------
+    */
+
+    public function list(int $perPage = 15): LengthAwarePaginator
+    {
+        return UserAssignment::with(['role', 'assignable'])
+            ->latest()
+            ->paginate($perPage);
+    }
+
+    public function listByUser(int $userId, int $perPage = 15): LengthAwarePaginator
+    {
+        return UserAssignment::with(['role', 'assignable'])
+            ->where('user_id', $userId)
+            ->latest()
+            ->paginate($perPage);
+    }
+
+    public function find(int $id): ?UserAssignment
+    {
+        return UserAssignment::with(['role', 'assignable'])
+            ->find($id);
+    }
+
+    public function getActiveAssignments(int $userId)
+    {
+        return UserAssignment::with(['role.permissions', 'assignable'])
+            ->where('user_id', $userId)
+            ->whereNull('ended_at')
+            ->get();
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | ASSIGN ROLE
+    |--------------------------------------------------------------------------
+    */
+
+    public function assignRoleAt(
+        int $userId,
+        int $roleId,
+        string $assignableMorph,
+        int $assignableId,
+        User $actor
+    ): UserAssignment {
+
+        // 🔥 Resolve morph safely
+        $modelClass = Relation::getMorphedModel($assignableMorph)
+            ?? throw new InvalidArgumentException('Invalid assignable type.');
+
+        $assignable = $modelClass::find($assignableId)
+            ?? throw new InvalidArgumentException('Assignable not found.');
+
+        $role = Role::find($roleId)
+            ?? throw new InvalidArgumentException('Invalid role.');
+
+        return DB::transaction(function () use (
+            $userId,
+            $roleId,
+            $assignableMorph,
+            $assignableId,
+            $actor,
+            $assignable
+        ) {
+
+            // 🔥 Expire same role at same scope
+            UserAssignment::where([
+                'user_id'         => $userId,
+                'role_id'         => $roleId,
+                'assignable_type' => $assignableMorph,
+                'assignable_id'   => $assignableId,
+            ])
+            ->whereNull('ended_at')
+            ->update(['ended_at' => now()]);
+
+            $assignment = UserAssignment::create([
+                'user_id'         => $userId,
+                'role_id'         => $roleId,
+                'assignable_type' => $assignableMorph,
+                'assignable_id'   => $assignableId,
+                'started_at'      => now(),
+                'assigned_by'     => $actor->id,
+            ]);
+
+            $this->flushUserAssignmentCache(
+                $userId,
+                $assignable->organization_id ?? null
+            );
+
+            AuditLogger::log(
+                $actor->id,
+                'role_assigned',
+                $assignable,
+                ['role_id' => $roleId]
+            );
+
+            return $assignment;
+        });
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | REVOKE
+    |--------------------------------------------------------------------------
+    */
+
+    public function revokeById(int $assignmentId, User $actor): UserAssignment
+    {
+        return DB::transaction(function () use ($assignmentId, $actor) {
+
+            $assignment = UserAssignment::with('assignable')
+                ->find($assignmentId)
+                ?? throw new RuntimeException('Assignment not found.');
+
+            if ($assignment->ended_at !== null) {
+                throw new RuntimeException('Already revoked.');
+            }
+
+            $assignment->update(['ended_at' => now()]);
+
+            $this->flushUserAssignmentCache(
+                $assignment->user_id,
+                $assignment->assignable->organization_id ?? null
+            );
+
+            AuditLogger::log(
+                $actor->id,
+                'role_revoked',
+                $assignment->assignable,
+                ['role_id' => $assignment->role_id]
+            );
+
+            return $assignment;
+        });
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | CACHE
+    |--------------------------------------------------------------------------
+    */
+
+    protected function flushUserAssignmentCache(
+        int $userId,
+        ?int $organizationId
+    ): void {
+
+        $tags = ["user:{$userId}"];
+
+        if ($organizationId) {
+            $tags[] = "org:{$organizationId}";
+        }
+
+        Cache::tags($tags)->flush();
+    }
+}
+<?php
+
+namespace App\Services\Auth;
+
+use App\Models\Auth\UserAssignment;
+use App\Models\Auth\UserContext;
+use App\Models\User;
+use App\Services\Audit\AuditLogger;
+use Illuminate\Support\Facades\DB;
+use RuntimeException;
+
+class UserContextService
+{
+    public function __construct(
+        protected ContextHierarchyResolver $resolver
+    ) {}
+
+    public function switchByAssignment(User $user, int $assignmentId): UserContext
+    {
+        return DB::transaction(function () use ($user, $assignmentId) {
+
+            $assignment = UserAssignment::with('assignable')
+                ->where('id', $assignmentId)
+                ->where('user_id', $user->id)
+                ->whereNull('ended_at')
+                ->first()
+                ?? throw new RuntimeException('Invalid assignment.');
+
+            $resolved = $this->resolver->resolve($assignment->assignable);
+
+            UserContext::where('user_id', $user->id)
+                ->whereNull('ended_at')
+                ->update(['ended_at' => now()]);
+
+            $context = UserContext::create([
+                'user_id' => $user->id,
+                'organization_id' => $resolved['organization_id'],
+                'branch_id' => $resolved['branch_id'],
+                'warehouse_id' => $resolved['warehouse_id'],
+                'outlet_id' => $resolved['outlet_id'],
+                'started_at' => now(),
+            ]);
+
+            AuditLogger::log(
+                $user->id,
+                'context_switched',
+                null,
+                $resolved
+            );
+
+            return $context;
+        });
+    }
+    public function switchByContext(
+    User $user,
+    int $organizationId,
+    ?int $branchId = null,
+    ?int $warehouseId = null,
+    ?int $outletId = null
+    ): UserContext {
+
+        return DB::transaction(function () use (
+            $user,
+            $organizationId,
+            $branchId,
+            $warehouseId,
+            $outletId
+        ) {
+
+            // Validate user has at least one assignment at this hierarchy
+            $hasAccess = UserAssignment::query()
+                ->where('user_id', $user->id)
+                ->whereNull('ended_at')
+                ->where(function ($q) use ($organizationId, $branchId, $warehouseId, $outletId) {
+
+                    $q->orWhere(fn ($sub) =>
+                        $sub->where('assignable_type', 'organization')
+                            ->where('assignable_id', $organizationId)
+                    );
+
+                    if ($branchId) {
+                        $q->orWhere(fn ($sub) =>
+                            $sub->where('assignable_type', 'branch')
+                                ->where('assignable_id', $branchId)
+                        );
+                    }
+
+                    if ($warehouseId) {
+                        $q->orWhere(fn ($sub) =>
+                            $sub->where('assignable_type', 'warehouse')
+                                ->where('assignable_id', $warehouseId)
+                        );
+                    }
+
+                    if ($outletId) {
+                        $q->orWhere(fn ($sub) =>
+                            $sub->where('assignable_type', 'outlet')
+                                ->where('assignable_id', $outletId)
+                        );
+                    }
+                })
+                ->exists();
+
+            if (! $hasAccess) {
+                throw new RuntimeException('Invalid context selection.');
+            }
+
+            // Expire old context
+            UserContext::where('user_id', $user->id)
+                ->whereNull('ended_at')
+                ->update(['ended_at' => now()]);
+
+            $context = UserContext::create([
+                'user_id' => $user->id,
+                'organization_id' => $organizationId,
+                'branch_id' => $branchId,
+                'warehouse_id' => $warehouseId,
+                'outlet_id' => $outletId,
+                'started_at' => now(),
+            ]);
+
+            AuditLogger::log(
+                $user->id,
+                'context_switched',
+                null,
+                [
+                    'organization_id' => $organizationId,
+                    'branch_id' => $branchId,
+                    'warehouse_id' => $warehouseId,
+                    'outlet_id' => $outletId,
+                ]
+            );
+
+            return $context;
+        });
+    }
+}
+<?php
+
+namespace App\Services\Auth;
+
+use App\Models\User;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use RuntimeException;
+
+class UserService
+{
+    public function __construct(
+        private UserContextService $userContextService,
+        private UserAssignmentService $userAssignmentService
+    ) {}
+
+    public function list(int $perPage = 15)
+    {
+        return User::paginate($perPage);
+    }
+
+    public function find(int $id): ?User
+    {
+        return User::with(['userAssignments.role', 'userContexts'])->find($id);
+    }
+
+    public function create(array $data): User
+    {
+        return DB::transaction(function () use ($data) {
+
+            $user = User::create([
+                'name' => $data['name'],
+                'email' => $data['email'],
+                'password' => Hash::make($data['password']),
+                'is_active' => $data['is_active'] ?? true,
+            ]);
+
+            if (! empty($data['assign_default_role'])) {
+                $guard = config('auth.defaults.guard', 'web');
+
+                \Spatie\Permission\Models\Role::firstOrCreate([
+                    'name' => $data['assign_default_role'],
+                    'guard_name' => $guard,
+                ])->users()->save($user);
+            }
+
+            if (! empty($data['context'])) {
+                throw new RuntimeException(
+                    'Context must be created via context switch API'
+                );
+            }
+
+            return $user->refresh();
+        });
+    }
+
+
+    public function update(int $id, array $data): User
+    {
+        $user = User::find($id);
+
+        if (! $user) {
+            throw new \RuntimeException('User not found.');
+        }
+
+        $user->update([
+            'name' => $data['name'] ?? $user->name,
+            'email' => $data['email'] ?? $user->email,
+            'is_active' => $data['is_active'] ?? $user->is_active,
+        ]);
+
+        if (! empty($data['password'])) {
+            $user->password = Hash::make($data['password']);
+            $user->save();
+        }
+
+        return $user->refresh();
+    }
+
+    public function delete(int $id): bool
+    {
+        $user = User::find($id);
+
+        if (! $user) {
+            return false;
+        }
+
+        return (bool) $user->delete();
+    }
+}
+<?php
+
+namespace App\Services\Core;
+
+use App\Exceptions\NotFoundException;
+use App\Models\Core\Branch;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+
+class BranchService
+{
+    /* =========================================================
+     | Pagination With Filters
+     ========================================================= */
+
+    public function paginate(
+        array $filters = [],
+        int $perPage = 15
+    ): LengthAwarePaginator {
+
+        $query = Branch::query();
+
+        if (isset($filters['organization_id'])) {
+            $query->where('organization_id', $filters['organization_id']);
+        }
+
+        if (! empty($filters['search'])) {
+            $query->where(function ($q) use ($filters) {
+                $q->where('name', 'like', '%'.$filters['search'].'%')
+                    ->orWhere('code', 'like', '%'.$filters['search'].'%');
+            });
+        }
+
+        if (isset($filters['is_active'])) {
+            $query->where('is_active', $filters['is_active']);
+        }
+
+        return $query->latest()->paginate($perPage);
+    }
+
+    /* =========================================================
+     | Retrieval
+     ========================================================= */
+
+    public function find(int $id): Branch
+    {
+        $branch = Branch::find($id);
+
+        if (! $branch) {
+            throw new NotFoundException('Branch not found.');
+        }
+
+        return $branch;
+    }
+
+    public function findWithTrashed(int $id): ?Branch
+    {
+        $branch = Branch::withTrashed()->find($id);
+
+        if (! $branch) {
+            throw new NotFoundException('Branch not found.');
+        }
+
+        return $branch;
+    }
+
+    public function create(array $data): Branch
+    {
+        return Branch::create($data);
+    }
+
+    public function update(int $id, array $data): Branch
+    {
+        $branch = $this->find($id);
+        $branch->update($data);
+
+        return $branch->fresh();
+    }
+
+    public function delete(int $id): void
+    {
+        $this->find($id)->delete();
+    }
+
+    public function restore(int $id): Branch
+    {
+        $branch = $this->findWithTrashed($id);
+
+        if (! $branch->trashed()) {
+            throw new NotFoundException('Branch not deleted.');
+        }
+
+        $branch->restore();
+
+        return $branch->fresh();
+    }
+
+    public function forceDelete(int $id): void
+    {
+        $this->findWithTrashed($id)->forceDelete();
+    }
+}
+<?php
+
+namespace App\Services\Core;
+
+use App\Exceptions\NotFoundException;
+use App\Models\Core\FinancialYear;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+
+class FinancialYearService
+{
+    public function paginate(array $filters = [], int $perPage = 15): LengthAwarePaginator
+    {
+        $query = FinancialYear::query();
+
+        if (isset($filters['organization_id'])) {
+            $query->where('organization_id', $filters['organization_id']);
+        }
+
+        if (isset($filters['is_active'])) {
+            $query->where('is_active', $filters['is_active']);
+        }
+
+        return $query->latest()->paginate($perPage);
+    }
+
+    public function find(int $id): FinancialYear
+    {
+        $fy = FinancialYear::find($id);
+
+        if (! $fy) {
+            throw new NotFoundException('Financial Year not found.');
+        }
+
+        return $fy;
+    }
+
+    public function create(array $data): FinancialYear
+    {
+        return FinancialYear::create($data);
+    }
+
+    public function update(int $id, array $data): FinancialYear
+    {
+        $financialYear = $this->find($id);
+        $financialYear->update($data);
+
+        return $financialYear->fresh();
+    }
+
+    public function delete(int $id): void
+    {
+        $this->find($id)->delete();
+    }
+
+    public function findWithTrashed(int $id): FinancialYear
+    {
+        $fy = FinancialYear::withTrashed()->find($id);
+
+        if (! $fy) {
+            throw new NotFoundException('Financial Year not found.');
+        }
+
+        return $fy;
+    }
+
+    public function restore(int $id): FinancialYear
+    {
+        $financialYear = $this->findWithTrashed($id);
+
+        if (! $financialYear->trashed()) {
+            throw new NotFoundException('Financial Year is not deleted.');
+        }
+
+        $financialYear->restore();
+
+        return $financialYear->fresh();
+    }
+
+    public function forceDelete(int $id): void
+    {
+        $this->findWithTrashed($id)->forceDelete();
+    }
+
+    public function getActiveYear($organizationId)
+    {
+        return FinancialYear::where('organization_id', $organizationId)
+            ->where('is_active', true)
+            ->first();
+    }
+
+    public function closeYear($id): bool
+    {
+        return (bool) FinancialYear::find($id)?->update(['is_closed' => true]);
+    }
+}
+<?php
+
+namespace App\Services\Core;
+
+use App\Exceptions\NotFoundException;
+use App\Models\Core\Organization;
+use App\Services\Policy\BasePolicyService;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+
+class OrganizationService extends BasePolicyService
+{
+    public function paginate(array $filters = [], int $perPage = 15): LengthAwarePaginator
+    {
+        $query = Organization::query();
+
+        if (isset($filters['id'])) {
+            $query->where('id', $filters['id']);
+        }
+
+        return $query->latest()->paginate($perPage);
+    }
+
+    public function find(int $id): Organization
+    {
+        $org = Organization::find($id);
+
+        if (! $org) {
+            throw new NotFoundException('Organization not found.');
+        }
+
+        return $org;
+    }
+
+    public function findWithTrashed(int $id): Organization
+    {
+        $org = Organization::withTrashed()->find($id);
+
+        if (! $org) {
+            throw new NotFoundException('Organization not found.');
+        }
+
+        return $org;
+    }
+
+    public function create(array $data): Organization
+    {
+        return Organization::create($data);
+    }
+
+    public function update(int $id, array $data): Organization
+    {
+        $org = $this->find($id);
+        $org->update($data);
+
+        return $org->fresh();
+    }
+
+    public function delete(int $id): void
+    {
+        $this->find($id)->delete();
+    }
+
+    public function restore(int $id): Organization
+    {
+        $org = $this->findWithTrashed($id);
+
+        if (! $org->trashed()) {
+            throw new NotFoundException('Organization is not deleted.');
+        }
+
+        $org->restore();
+
+        return $org->fresh();
+    }
+
+    public function forceDelete(int $id): void
+    {
+        $this->findWithTrashed($id)->forceDelete();
+    }
+}
+<?php
+
+namespace App\Services\Core;
+
+use App\Exceptions\NotFoundException;
+use App\Models\Core\OutletSection;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Database\Eloquent\Collection;
+
+class OutletSectionService
+{
+    /* =========================================================
+     | Pagination
+     ========================================================= */
+
+    public function paginate(
+        array $filters = [],
+        int $perPage = 15
+    ): LengthAwarePaginator {
+        $query = OutletSection::query()
+            ->with([
+                'organization',
+                'outlet',
+                'sectionStocks'
+            ]);
+
+        if (isset($filters['organization_id'])) {
+            $query->where('organization_id', $filters['organization_id']);
+        }
+
+        if (isset($filters['outlet_id'])) {
+            $query->where('outlet_id', $filters['outlet_id']);
+        }
+
+        if (isset($filters['is_pos_counter'])) {
+            $query->where('is_pos_counter', $filters['is_pos_counter']);
+        }
+
+        if (isset($filters['is_active'])) {
+            $query->where('is_active', $filters['is_active']);
+        }
+
+        if (! empty($filters['search'])) {
+            $query->where(function ($q) use ($filters) {
+                $q->where('name', 'like', '%'.$filters['search'].'%')
+                  ->orWhere('code', 'like', '%'.$filters['search'].'%');
+            });
+        }
+
+        return $query->latest()->paginate($perPage);
+    }
+
+    /* =========================================================
+     | Retrieval
+     ========================================================= */
+
+    public function find(int $id): OutletSection
+    {
+        $section = OutletSection::with([
+            'organization',
+            'outlet',
+            'sectionStocks'
+        ])->find($id);
+
+        if (! $section) {
+            throw new NotFoundException('Outlet Section not found.');
+        }
+
+        return $section;
+    }
+
+    public function findWithTrashed(int $id): OutletSection
+    {
+        $section = OutletSection::withTrashed()->find($id);
+
+        if (! $section) {
+            throw new NotFoundException('Outlet Section not found.');
+        }
+
+        return $section;
+    }
+
+    /* =========================================================
+     | Mutations
+     ========================================================= */
+
+    public function create(array $data): OutletSection
+    {
+        return OutletSection::create($data);
+    }
+
+    public function update(int $id, array $data): OutletSection
+    {
+        $section = $this->find($id);
+
+        $section->update($data);
+
+        return $section->fresh();
+    }
+
+    public function delete(int $id): void
+    {
+        $this->find($id)->delete();
+    }
+
+    public function restore(int $id): OutletSection
+    {
+        $section = $this->findWithTrashed($id);
+
+        if (! $section->trashed()) {
+            throw new NotFoundException(
+                'Outlet Section not found or not deleted.'
+            );
+        }
+
+        $section->restore();
+
+        return $section->fresh();
+    }
+
+    public function forceDelete(int $id): void
+    {
+        $this->findWithTrashed($id)->forceDelete();
+    }
+
+    /* =========================================================
+     | Extra Helper Methods (Preserved)
+     ========================================================= */
+
+    public function getByOutlet(int $outletId): Collection
+    {
+        return OutletSection::where('outlet_id', $outletId)->get();
+    }
+
+    public function getPosSections(int $outletId): Collection
+    {
+        return OutletSection::where('outlet_id', $outletId)
+            ->where('is_pos_counter', true)
+            ->get();
+    }
+
+    public function getStorageSections(int $outletId): Collection
+    {
+        return OutletSection::where('outlet_id', $outletId)
+            ->where('is_pos_counter', false)
+            ->get();
+    }
+
+    public function getByOrganization(int $organizationId): Collection
+    {
+        return OutletSection::where('organization_id', $organizationId)->get();
+    }
+}
+<?php
+
+namespace App\Services\Core;
+
+use App\Exceptions\NotFoundException;
+use App\Models\Core\Outlet;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+
+class OutletService
+{
+    public function paginate(array $filters = [], int $perPage = 15): LengthAwarePaginator
+    {
+        $query = Outlet::query()
+            ->with([
+                'organization',
+                'branch',
+                'warehouse',
+            ]);
+
+        if (isset($filters['organization_id'])) {
+            $query->where('organization_id', $filters['organization_id']);
+        }
+
+        if (! empty($filters['search'])) {
+            $query->where('name', 'like', '%'.$filters['search'].'%');
+        }
+
+        return $query->latest()->paginate($perPage);
+    }
+
+    public function find(int $id): Outlet
+    {
+        $outlet = Outlet::find($id);
+
+        if (! $outlet) {
+            throw new NotFoundException('Outlet not found.');
+        }
+
+        return $outlet;
+    }
+
+    public function findWithTrashed(int $id): Outlet
+    {
+        $outlet = Outlet::withTrashed()->find($id);
+
+        if (! $outlet) {
+            throw new NotFoundException('Outlet not found.');
+        }
+
+        return $outlet;
+    }
+
+    public function create(array $data): Outlet
+    {
+        return Outlet::create($data);
+    }
+
+    public function update(int $id, array $data): Outlet
+    {
+        $outlet = $this->find($id);
+        $outlet->update($data);
+
+        return $outlet->fresh();
+    }
+
+    public function delete(int $id): void
+    {
+        $this->find($id)->delete();
+    }
+
+    public function restore(int $id): Outlet
+    {
+        $outlet = $this->findWithTrashed($id);
+
+        if (! $outlet->trashed()) {
+            throw new NotFoundException('Warehouse not deleted.');
+        }
+
+        $outlet->restore();
+
+        return $outlet->fresh();
+    }
+
+    public function forceDelete(int $id): void
+    {
+        $this->findWithTrashed($id)->forceDelete();
+    }
+}
+<?php
+
+namespace App\Services\Core;
+
+use App\Models\Core\SectionCategory;
+use App\Exceptions\NotFoundException;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+
+class SectionCategoryService
+{
+    /* =========================================================
+     | Pagination
+     ========================================================= */
+
+    public function paginate(
+    array $filters = [],
+    int $perPage = 15
+): LengthAwarePaginator {
+
+    $query = SectionCategory::query();
+
+    // Multi-tenant filter
+    if (isset($filters['organization_id'])) {
+        $query->where('organization_id', $filters['organization_id']);
+    }
+
+    // Optional active filter
+    if (isset($filters['is_active'])) {
+        $query->where('is_active', (bool) $filters['is_active']);
+    }
+
+    // Search support
+    if (! empty($filters['search'])) {
+        $query->where(function ($q) use ($filters) {
+            $q->where('name', 'like', '%'.$filters['search'].'%')
+              ->orWhere('code', 'like', '%'.$filters['search'].'%');
+        });
+    }
+
+    return $query->latest()->paginate($perPage);
+}
+
+
+    /* =========================================================
+     | Retrieval
+     ========================================================= */
+
+    public function find(int $id): SectionCategory
+    {
+        $category = SectionCategory::with([
+            'organization',
+            'warehouseSections',
+        ])->find($id);
+
+        if (! $category) {
+            throw new NotFoundException('Section Category not found.');
+        }
+
+        return $category;
+    }
+
+    public function findWithTrashed(int $id): SectionCategory
+    {
+        $category = SectionCategory::withTrashed()
+            ->with(['organization', 'warehouseSections'])
+            ->find($id);
+
+        if (! $category) {
+            throw new NotFoundException('Section Category not found.');
+        }
+
+        return $category;
+    }
+
+    /* =========================================================
+     | Mutations
+     ========================================================= */
+
+    public function create(array $data): SectionCategory
+    {
+        return SectionCategory::create($data);
+    }
+
+    public function update(int $id, array $data): SectionCategory
+    {
+        $category = $this->find($id);
+
+        $category->update($data);
+
+        return $category->fresh();
+    }
+
+    public function delete(int $id): void
+    {
+        $category = $this->find($id);
+
+        $category->delete();
+    }
+
+    public function forceDelete(int $id): void
+    {
+        $category = $this->findWithTrashed($id);
+        $category->forceDelete();
+    }
+
+    public function restore(int $id): SectionCategory
+    {
+        $category = $this->findWithTrashed($id);
+
+        if (! $category->trashed()) {
+            throw new NotFoundException(
+                'Section Category is not deleted.'
+            );
+        }
+
+        $category->restore();
+
+        return $category->fresh();
+    }
+}
+<?php
+
+namespace App\Services\Core;
+
+use App\Exceptions\NotFoundException;
+use App\Models\Core\Tax;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Database\Eloquent\Collection;
+
+class TaxService
+{
+    /* =========================================================
+     | Pagination
+     ========================================================= */
+
+    public function paginate(
+        array $filters = [],
+        int $perPage = 15
+    ): LengthAwarePaginator {
+        $query = Tax::query();
+
+        if (isset($filters['organization_id'])) {
+            $query->where('organization_id', $filters['organization_id']);
+        }
+
+        if (isset($filters['is_active'])) {
+            $query->where('is_active', (bool) $filters['is_active']);
+        }
+
+        if (! empty($filters['search'])) {
+            $query->where('name', 'like', '%'.$filters['search'].'%');
+        }
+
+        return $query->latest()->paginate($perPage);
+    }
+
+    /* =========================================================
+     | Retrieval
+     ========================================================= */
+
+    public function find(int $id): Tax
+    {
+        $tax = Tax::find($id);
+
+        if (! $tax) {
+            throw new NotFoundException('Tax not found.');
+        }
+
+        return $tax;
+    }
+
+    public function findWithTrashed(int $id): Tax
+    {
+        $tax = Tax::withTrashed()->find($id);
+
+        if (! $tax) {
+            throw new NotFoundException('Tax not found.');
+        }
+
+        return $tax;
+    }
+
+    /* =========================================================
+     | Mutations
+     ========================================================= */
+
+    public function create(array $data): Tax
+    {
+        return Tax::create($data);
+    }
+
+    public function update(int $id, array $data): Tax
+    {
+        $tax = $this->find($id);
+
+        $tax->update($data);
+
+        return $tax->fresh();
+    }
+
+    public function delete(int $id): void
+    {
+        $this->find($id)->delete();
+    }
+
+    public function restore(int $id): Tax
+    {
+        $tax = $this->findWithTrashed($id);
+
+        if (! $tax->trashed()) {
+            throw new NotFoundException('Tax is not deleted.');
+        }
+
+        $tax->restore();
+
+        return $tax->fresh();
+    }
+
+    public function forceDelete(int $id): void
+    {
+        $this->findWithTrashed($id)->forceDelete();
+    }
+
+    /* =========================================================
+     | Extra Helper Methods (Preserved)
+     ========================================================= */
+
+    public function getActiveByOrganization(int $organizationId): Collection
+    {
+        return Tax::where('organization_id', $organizationId)
+            ->where('is_active', true)
+            ->get();
+    }
+}
+<?php
+
+namespace App\Services\Core;
+
+use App\Exceptions\NotFoundException;
+use App\Models\Core\WarehouseSection;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Database\Eloquent\Collection;
+
+class WarehouseSectionService
+{
+    /* =========================================================
+     | Pagination with Filters
+     ========================================================= */
+
+    public function paginate(
+        array $filters = [],
+        int $perPage = 15
+    ): LengthAwarePaginator {
+
+        $query = WarehouseSection::query()
+            ->with([
+                'warehouse',
+                'parentSection',
+                'childSections',
+                'sectionCategory',
+                'sectionStocks',
+            ]);
+
+        if (isset($filters['organization_id'])) {
+            $query->where('organization_id', $filters['organization_id']);
+        }
+
+        if (isset($filters['warehouse_id'])) {
+            $query->where('warehouse_id', $filters['warehouse_id']);
+        }
+
+        if (isset($filters['parent_section_id'])) {
+            $query->where('parent_section_id', $filters['parent_section_id']);
+        }
+
+        if (isset($filters['is_active'])) {
+            $query->where('is_active', $filters['is_active']);
+        }
+
+        if (! empty($filters['search'])) {
+            $query->where(function ($q) use ($filters) {
+                $q->where('name', 'like', '%'.$filters['search'].'%')
+                  ->orWhere('code', 'like', '%'.$filters['search'].'%');
+            });
+        }
+
+        return $query
+            ->orderByDesc('created_at')
+            ->paginate($perPage);
+    }
+
+    /* =========================================================
+     | Retrieval
+     ========================================================= */
+
+    public function find(int $id): WarehouseSection
+    {
+        $section = WarehouseSection::with([
+            'warehouse',
+            'parentSection',
+            'childSections',
+            'sectionCategory',
+            'sectionStocks',
+        ])->find($id);
+
+        if (! $section) {
+            throw new NotFoundException('Warehouse Section not found.');
+        }
+
+        return $section;
+    }
+
+    public function findWithTrashed(int $id): WarehouseSection
+    {
+        $section = WarehouseSection::withTrashed()
+            ->with([
+                'warehouse',
+                'parentSection',
+                'childSections',
+                'sectionCategory',
+                'sectionStocks',
+            ])
+            ->find($id);
+
+        if (! $section) {
+            throw new NotFoundException('Warehouse Section not found.');
+        }
+
+        return $section;
+    }
+
+    /* =========================================================
+     | Mutations
+     ========================================================= */
+
+    public function create(array $data): WarehouseSection
+    {
+        return WarehouseSection::create($data);
+    }
+
+    public function update(int $id, array $data): WarehouseSection
+    {
+        $section = $this->find($id);
+
+        $section->update($data);
+
+        return $section->fresh();
+    }
+
+    public function delete(int $id): void
+    {
+        $this->find($id)->delete();
+    }
+
+    public function restore(int $id): WarehouseSection
+    {
+        $section = $this->findWithTrashed($id);
+
+        if (! $section->trashed()) {
+            throw new NotFoundException(
+                'Warehouse Section is not deleted.'
+            );
+        }
+
+        $section->restore();
+
+        return $section->fresh();
+    }
+
+    public function forceDelete(int $id): void
+    {
+        $this->findWithTrashed($id)->forceDelete();
+    }
+
+    /* =========================================================
+     | Hierarchy / Helper Methods (Preserved)
+     ========================================================= */
+
+    public function getByWarehouse(int $warehouseId): Collection
+    {
+        return WarehouseSection::where('warehouse_id', $warehouseId)->get();
+    }
+
+    public function getHierarchy(int $warehouseId): Collection
+    {
+        return WarehouseSection::where('warehouse_id', $warehouseId)
+            ->whereNull('parent_section_id')
+            ->with('childSections')
+            ->get();
+    }
+
+    public function getChildren(int $parentSectionId): Collection
+    {
+        return WarehouseSection::where(
+            'parent_section_id',
+            $parentSectionId
+        )->get();
+    }
+
+    public function hasChildren(int $sectionId): bool
+    {
+        return WarehouseSection::where(
+            'parent_section_id',
+            $sectionId
+        )->exists();
+    }
+
+    public function getByCategory(int $sectionCategoryId): Collection
+    {
+        return WarehouseSection::where(
+            'section_category_id',
+            $sectionCategoryId
+        )->get();
+    }
+
+    public function active(array $filters = []): Collection
+    {
+        return WarehouseSection::query()
+            ->when(
+                isset($filters['organization_id']),
+                fn ($q) => $q->where(
+                    'organization_id',
+                    $filters['organization_id']
+                )
+            )
+            ->when(
+                isset($filters['warehouse_id']),
+                fn ($q) => $q->where(
+                    'warehouse_id',
+                    $filters['warehouse_id']
+                )
+            )
+            ->where('is_active', true)
+            ->get();
+    }
+}
+<?php
+
+namespace App\Services\Core;
+
+use App\Exceptions\NotFoundException;
+use App\Models\Core\Warehouse;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+
+class WarehouseService
+{
+    public function paginate(array $filters = [], int $perPage = 15): LengthAwarePaginator
+    {
+        $query = Warehouse::query()->with(['organization','branch']);
+
+        if (isset($filters['organization_id'])) {
+            $query->where('organization_id', $filters['organization_id']);
+        }
+
+        if (! empty($filters['search'])) {
+            $query->where('name', 'like', '%'.$filters['search'].'%');
+        }
+
+        return $query->latest()->paginate($perPage);
+    }
+
+    public function find(int $id): Warehouse
+    {
+        $warehouse = Warehouse::find($id);
+
+        if (! $warehouse) {
+            throw new NotFoundException('Warehouse not found.');
+        }
+
+        return $warehouse;
+    }
+
+    public function findWithTrashed(int $id): Warehouse
+    {
+        $warehouse = Warehouse::withTrashed()->find($id);
+
+        if (! $warehouse) {
+            throw new NotFoundException('Warehouse not found.');
+        }
+
+        return $warehouse;
+    }
+    public function create(array $data): Warehouse
+    {
+        return Warehouse::create($data);
+    }
+
+    public function update(int $id, array $data): Warehouse
+    {
+        $warehouse = $this->find($id);
+        $warehouse->update($data);
+
+        return $warehouse->fresh();
+    }
+
+    public function delete(int $id): void
+    {
+        $this->find($id)->delete();
+    }
+
+    public function restore(int $id): Warehouse
+    {
+        $warehouse = $this->findWithTrashed($id);
+
+        if (! $warehouse->trashed()) {
+            throw new NotFoundException('Warehouse not deleted.');
+        }
+
+        $warehouse->restore();
+
+        return $warehouse->fresh();
+    }
+
+    public function forceDelete(int $id): void
+    {
+        $this->findWithTrashed($id)->forceDelete();
+    }
+}
+<?php
+
+namespace App\Services\Inventory;
+
+use App\Models\Inventory\BrandModel;
+
+class BrandModelService
+{
+    public function paginate(int $organizationId, int $brandId, array $filters, int $perPage)
+    {
+        return BrandModel::query()
+            ->where('organization_id', $organizationId)
+            ->where('brand_id', $brandId)
+
+            ->when(
+                filled($filters['search'] ?? null),
+                fn ($q) =>
+                    $q->where(function ($q2) use ($filters) {
+                        $search = trim($filters['search']);
+                        $q2->where('name', 'like', "%{$search}%")
+                           ->orWhere('slug', 'like', "%{$search}%")
+                           ->orWhere('series', 'like', "%{$search}%");
+                    })
+            )
+
+            ->paginate($perPage);
+    }
+
+    public function create(array $data)
+    {
+        return BrandModel::create($data);
+    }
+
+    public function find(int $organizationId, int $id)
+    {
+        return BrandModel::where('organization_id', $organizationId)
+            ->findOrFail($id);
+    }
+
+    public function findWithTrashed(int $organizationId, int $id)
+    {
+        return BrandModel::withTrashed()
+            ->where('organization_id', $organizationId)
+            ->findOrFail($id);
+    }
+
+    public function update(BrandModel $model, array $data)
+    {
+        $model->update($data);
+        return $model;
+    }
+
+    public function delete(BrandModel $model)
+    {
+        $model->delete();
+    }
+
+    public function restore(BrandModel $model)
+    {
+        $model->restore();
+    }
+
+    public function forceDelete(BrandModel $model)
+    {
+        $model->forceDelete();
+    }
+}
+<?php
+
+namespace App\Services\Inventory;
+
+use App\Models\Inventory\Brand;
+
+class BrandService
+{
+    public function paginate(int $organizationId, array $filters, int $perPage)
+    {
+        return Brand::query()
+            ->where('organization_id', $organizationId)
+
+            ->when(
+                filled($filters['search'] ?? null),
+                fn ($q) =>
+                    $q->where(function ($q2) use ($filters) {
+                        $search = trim($filters['search']);
+                        $q2->where('name', 'like', "%{$search}%")
+                           ->orWhere('slug', 'like', "%{$search}%");
+                    })
+            )
+
+            ->paginate($perPage);
+    }
+
+    public function create(array $data)
+    {
+        return Brand::create($data);
+    }
+
+    public function find(int $organizationId, int $id)
+    {
+        return Brand::where('organization_id', $organizationId)
+            ->findOrFail($id);
+    }
+
+    public function findWithTrashed(int $organizationId, int $id)
+    {
+        return Brand::withTrashed()
+            ->where('organization_id', $organizationId)
+            ->findOrFail($id);
+    }
+
+    public function update(Brand $brand, array $data)
+    {
+        $brand->update($data);
+        return $brand;
+    }
+
+    public function delete(Brand $brand)
+    {
+        $brand->delete();
+    }
+
+    public function restore(Brand $brand)
+    {
+        $brand->restore();
+    }
+
+    public function forceDelete(Brand $brand)
+    {
+        $brand->forceDelete();
+    }
+}
+<?php
+
+namespace App\Services\Inventory;
+
+use App\Models\Inventory\Category;
+
+class CategoryService
+{
+    public function paginate(int $organizationId, array $filters, int $perPage)
+    {
+        return Category::query()
+            ->where('organization_id', $organizationId)
+
+            ->when(
+                array_key_exists('parent_id', $filters),
+                fn ($q) => $q->where('parent_id', $filters['parent_id'])
+            )
+
+            ->when(
+                array_key_exists('is_active', $filters),
+                fn ($q) => $q->where('is_active', (bool) $filters['is_active'])
+            )
+
+            ->when(
+                filled($filters['search'] ?? null),
+                function ($q) use ($filters) {
+                    $search = trim($filters['search']);
+
+                    $q->where(function ($q2) use ($search) {
+                        $q2->where('name', 'like', "%{$search}%")
+                        ->orWhere('slug', 'like', "%{$search}%");
+                    });
+                }
+    )
+
+    ->paginate($perPage);
+
+    }
+
+    public function create(array $data)
+    {
+        return Category::create($data);
+    }
+
+    public function find(int $organizationId, int $id)
+    {
+        return Category::where('organization_id', $organizationId)
+            ->findOrFail($id);
+    }
+
+    public function findWithTrashed(int $organizationId, int $id)
+    {
+        return Category::withTrashed()
+            ->where('organization_id', $organizationId)
+            ->findOrFail($id);
+    }
+
+    public function update(Category $category, array $data)
+    {
+        $category->update($data);
+        return $category;
+    }
+
+    public function delete(Category $category)
+    {
+        $category->delete();
+    }
+
+    public function restore(Category $category)
+    {
+        $category->restore();
+    }
+
+    public function forceDelete(Category $category)
+    {
+        $category->forceDelete();
+    }
+}
+<?php
+
+namespace App\Services\Inventory;
+
+use App\Models\Inventory\ProductVariant;
+use RuntimeException;
+use Illuminate\Support\Facades\DB;
+
+class InboundStockEngine
+{
+    public function __construct(
+        protected InventoryBatchService $batchService,
+        protected StockMovementService $movementService
+    ) {}
+
+    public function add(array $payload): void
+    {
+        DB::transaction(function () use ($payload) {
+
+            $variant = ProductVariant::query()
+                ->lockForUpdate()
+                ->findOrFail($payload['product_variant_id']);
+
+            $variant->loadMissing('product');
+
+            $valuation = $variant->product->valuation_method;
+
+            $organizationId = $variant->organization_id;
+            $locationId     = $payload['stock_location_id'];
+            $quantity       = (float) $payload['quantity'];
+            $unitCost       = (float) $payload['unit_cost'];
+
+            if ($quantity <= 0) {
+                throw new RuntimeException("Inbound quantity must be positive.");
+            }
+
+            // ===============================================
+            // FIFO / FEFO → Batch-based inbound
+            // ===============================================
+            if (in_array($valuation, ['FIFO', 'FEFO'])) {
+
+                $batch = $this->batchService->create([
+                    'product_variant_id' => $variant->id,
+                    'batch_number'       => $payload['batch_number'] ?? uniqid('BATCH-'),
+                    'manufacturing_date' => $payload['manufacturing_date'] ?? null,
+                    'expiry_date'        => $payload['expiry_date'] ?? null,
+                    'initial_cost'       => $unitCost,
+                ]);
+
+                $this->movementService->move([
+                    ...$payload,
+                    'organization_id'    => $organizationId,
+                    'product_variant_id' => $variant->id,
+                    'inventory_batch_id' => $batch->id,
+                    'quantity'           => $quantity,
+                    'unit_cost'          => $unitCost,
+                ]);
+
+                return;
+            }
+
+            // ===============================================
+            // WAVG → No batch
+            // ===============================================
+            if ($valuation === 'WAVG') {
+
+                $this->movementService->move([
+                    ...$payload,
+                    'organization_id'    => $organizationId,
+                    'product_variant_id' => $variant->id,
+                    'inventory_batch_id' => null,
+                    'quantity'           => $quantity,
+                    'unit_cost'          => $unitCost,
+                ]);
+
+                return;
+            }
+
+            throw new RuntimeException("Unsupported valuation method.");
+        });
+    }
+}
+<?php
+
+namespace App\Services\Inventory;
+
+use App\Models\Inventory\InventoryBatch;
+use App\Models\Inventory\InventoryLedger;
+use Illuminate\Database\Eloquent\Collection;
+use RuntimeException;
+
+class InventoryBatchService
+{
+    /*
+    |--------------------------------------------------------------------------
+    | FIFO
+    |--------------------------------------------------------------------------
+    */
+
+    public function getAvailableBatchesFIFO(
+        int $variantId,
+        int $locationId
+    ): Collection {
+        return InventoryBatch::query()
+            ->where('product_variant_id', $variantId)
+            ->whereHas('balances', function ($q) use ($locationId) {
+                $q->where('stock_location_id', $locationId)
+                  ->where('quantity', '>', 0);
+            })
+            ->orderBy('created_at', 'asc')
+            ->lockForUpdate()
+            ->get();
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | FEFO
+    |--------------------------------------------------------------------------
+    */
+
+    public function getAvailableBatchesFEFO(int $variantId, int $locationId)
+    {
+        return InventoryBatch::query()
+            ->where('product_variant_id', $variantId)
+            ->whereHas('balances', function ($q) use ($locationId) {
+                $q->where('stock_location_id', $locationId)
+                ->where('quantity', '>', 0);
+            })
+            ->with(['balances' => function ($q) use ($locationId) {
+                $q->where('stock_location_id', $locationId);
+            }])
+            ->orderByRaw('expiry_date IS NULL')
+            ->orderBy('expiry_date', 'asc')
+            ->lockForUpdate()
+            ->get();
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | CRUD
+    |--------------------------------------------------------------------------
+    */
+
+    public function create(array $data): InventoryBatch
+    {
+        return InventoryBatch::create([
+            'product_variant_id' => $data['product_variant_id'],
+            'batch_number'       => $data['batch_number'],
+            'manufacturing_date' => $data['manufacturing_date'] ?? null,
+            'expiry_date'        => $data['expiry_date'] ?? null,
+            'initial_cost'       => $data['initial_cost'],
+            'is_recalled'        => false,
+            'status'             => 'open',
+        ]);
+    }
+
+    public function find(int $organizationId, int $id): ?InventoryBatch
+    {
+        return InventoryBatch::whereHas('productVariant', function ($q) use ($organizationId) {
+                $q->where('organization_id', $organizationId);
+            })
+            ->where('id', $id)
+            ->first();
+    }
+
+    public function findWithTrashed(int $organizationId, int $id): ?InventoryBatch
+    {
+        return InventoryBatch::withTrashed()
+            ->whereHas('productVariant', function ($q) use ($organizationId) {
+                $q->where('organization_id', $organizationId);
+            })
+            ->where('id', $id)
+            ->first();
+    }
+
+    public function update(InventoryBatch $batch, array $data): InventoryBatch
+    {
+        if ($batch->balances()->where('quantity', '>', 0)->exists()) {
+            throw new RuntimeException('Cannot update batch with active stock.');
+        }
+
+        $batch->update($data);
+
+        return $batch;
+    }
+
+    public function delete(InventoryBatch $batch): void
+    {
+        if ($batch->balances()->where('quantity', '>', 0)->exists()) {
+            throw new RuntimeException('Cannot delete batch with remaining stock.');
+        }
+
+        $batch->delete();
+    }
+
+    public function restore(InventoryBatch $batch): void
+    {
+        $batch->restore();
+    }
+
+    public function forceDelete(InventoryBatch $batch): void
+    {
+        if (InventoryLedger::where('inventory_batch_id', $batch->id)->exists()) {
+            throw new RuntimeException('Cannot permanently delete batch with ledger history.');
+        }
+
+        $batch->forceDelete();
+    }
+}
+<?php
+
+namespace App\Services\Inventory;
+
+class InventoryEngine
+{
+    public function __construct(
+        protected OutboundStockEngine $outbound,
+        protected PurchaseStockEngine $inbound
+    ) {}
+
+    public function add(array $payload): void
+    {
+        $this->inbound->add($payload);
+    }
+
+    public function consume(array $payload): void
+    {
+        $this->outbound->consume($payload);
+    }
+}
+
+<?php
+
+namespace App\Services\Inventory;
+
+use App\Models\Inventory\ProductVariant;
+use RuntimeException;
+
+class OutboundStockEngine
+{
+    public function __construct(
+        protected ValuationStrategyResolver $resolver
+    ) {}
+
+    public function consume(array $payload): void
+    {
+        $variant = ProductVariant::query()
+            ->lockForUpdate()
+            ->find($payload['product_variant_id']);
+
+        if (! $variant) {
+            throw new RuntimeException("Variant not found.");
+        }
+
+        $strategy = $this->resolver->resolve($variant);
+
+        $strategy->consume($payload, $variant);
+    }
+}
+<?php
+
+namespace App\Services\Inventory;
+
+use App\Models\Inventory\Product;
+use App\Models\Inventory\ProductImage;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+
+class ProductImageService
+{
+    /* =========================================================
+     | LIST
+     ========================================================= */
+
+    public function list(Product $product)
+    {
+        return $product->images()
+            ->orderBy('sort_order')
+            ->get();
+    }
+
+    /* =========================================================
+     | UPLOAD
+     ========================================================= */
+
+    public function upload(Product $product, UploadedFile $file)
+    {
+        return DB::transaction(function () use ($product, $file) {
+
+            $path = $file->store(
+                "products/{$product->organization_id}/{$product->id}",
+                'public'
+            );
+
+            $isPrimary = !$product->images()->exists();
+
+            $image = $product->images()->create([
+                'path' => $path,
+                'disk' => 'public',
+                'is_primary' => $isPrimary,
+                'sort_order' => $product->images()->max('sort_order') + 1,
+            ]);
+
+            return $image;
+        });
+    }
+
+    /* =========================================================
+     | SET PRIMARY
+     ========================================================= */
+
+    public function setPrimary(ProductImage $image)
+    {
+        return DB::transaction(function () use ($image) {
+
+            $image->imageable->images()
+                ->update(['is_primary' => false]);
+
+            $image->update(['is_primary' => true]);
+
+            return $image;
+        });
+    }
+
+    /* =========================================================
+     | REORDER
+     ========================================================= */
+
+    public function reorder(Product $product, array $orderedIds)
+    {
+        foreach ($orderedIds as $index => $id) {
+            $product->images()
+                ->where('id', $id)
+                ->update(['sort_order' => $index + 1]);
+        }
+    }
+
+    /* =========================================================
+     | DELETE (Soft)
+     ========================================================= */
+
+    public function delete(ProductImage $image)
+    {
+        $image->delete();
+    }
+
+    /* =========================================================
+     | RESTORE
+     ========================================================= */
+
+    public function restore(ProductImage $image)
+    {
+        $image->restore();
+    }
+
+    /* =========================================================
+     | FORCE DELETE
+     ========================================================= */
+
+    public function forceDelete(ProductImage $image)
+    {
+        Storage::disk($image->disk)->delete($image->path);
+
+        $image->forceDelete();
+    }
+}
+<?php
+
+namespace App\Services\Inventory;
+
+use App\Models\Inventory\Product;
+use App\Models\Inventory\ProductVariant;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
+
+class ProductService
+{
+    /* =========================================================
+     | PAGINATE
+     ========================================================= */
+
+    public function paginate(int $organizationId, int $perPage)
+    {
+        return Product::query()
+            ->where('organization_id', $organizationId)
+            ->with('variants.units', 'variants.variationValues')
+            ->paginate($perPage);
+    }
+
+    /* =========================================================
+     | FIND
+     ========================================================= */
+
+    public function find(int $organizationId, int $id)
+    {
+        return Product::query()
+            ->where('organization_id', $organizationId)
+            ->with('variants.units', 'variants.variationValues')
+            ->findOrFail($id);
+    }
+
+    public function findWithTrashed(int $organizationId, int $id)
+    {
+        return Product::withTrashed()
+            ->where('organization_id', $organizationId)
+            ->with('variants.units', 'variants.variationValues')
+            ->findOrFail($id);
+    }
+
+    /* =========================================================
+     | CREATE
+     ========================================================= */
+
+    public function create(array $data)
+    {
+        return DB::transaction(function () use ($data) {
+
+            $product = Product::create($data);
+
+            foreach ($data['variants'] as $variantData) {
+                $this->createVariant($product, $variantData);
+            }
+
+            return $product->load('variants.units', 'variants.variationValues');
+        });
+    }
+
+    private function createVariant(Product $product, array $variantData)
+    {
+        $variant = $product->variants()->create([
+            'sku' => $variantData['sku'],
+            'barcode' => $variantData['barcode'] ?? null,
+            'cost_price' => $variantData['cost_price'],
+            'sale_price' => $variantData['sale_price'],
+            'is_active' => $variantData['is_active'] ?? true,
+        ]);
+
+        foreach ($variantData['units'] as $unit) {
+            $variant->units()->create($unit);
+        }
+
+        if (!empty($variantData['variation_value_ids'])) {
+            $variant->variationValues()
+                ->sync($variantData['variation_value_ids']);
+        }
+
+        return $variant;
+    }
+
+    /* =========================================================
+     | UPDATE (Complex Sync)
+     ========================================================= */
+
+    public function update(Product $product, array $data)
+    {
+        return DB::transaction(function () use ($product, $data) {
+
+            $product->update($data);
+
+            $existingVariantIds = $product->variants()->pluck('id')->toArray();
+            $incomingVariantIds = [];
+
+            foreach ($data['variants'] as $variantData) {
+
+                if (!empty($variantData['id'])) {
+
+                    $variant = ProductVariant::findOrFail($variantData['id']);
+                    $variant->update([
+                        'sku' => $variantData['sku'],
+                        'barcode' => $variantData['barcode'] ?? null,
+                        'cost_price' => $variantData['cost_price'],
+                        'sale_price' => $variantData['sale_price'],
+                        'is_active' => $variantData['is_active'] ?? true,
+                    ]);
+
+                    $variant->units()->delete();
+                    foreach ($variantData['units'] as $unit) {
+                        $variant->units()->create($unit);
+                    }
+
+                    $variant->variationValues()
+                        ->sync($variantData['variation_value_ids'] ?? []);
+
+                    $incomingVariantIds[] = $variant->id;
+
+                } else {
+
+                    $newVariant = $this->createVariant($product, $variantData);
+                    $incomingVariantIds[] = $newVariant->id;
+                }
+            }
+
+            $variantsToDelete = array_diff($existingVariantIds, $incomingVariantIds);
+
+            ProductVariant::whereIn('id', $variantsToDelete)
+                ->delete();
+
+            return $product->load('variants.units', 'variants.variationValues');
+        });
+    }
+
+    /* =========================================================
+     | DELETE
+     ========================================================= */
+
+    public function delete(Product $product)
+    {
+        $product->delete();
+    }
+
+    public function restore(Product $product)
+    {
+        $product->restore();
+    }
+
+    public function forceDelete(Product $product)
+    {
+        if ($product->variants()->exists()) {
+            throw ValidationException::withMessages([
+                'product' => 'Cannot permanently delete product with variants.'
+            ]);
+        }
+
+        $product->forceDelete();
+    }
+}
+<?php
+
+namespace App\Services\Inventory;
+
+use App\Models\Inventory\InventoryBatch;
+use App\Models\Inventory\InventoryBalance;
+use Illuminate\Support\Facades\DB;
+
+class PurchaseStockEngine
+{
+    public function __construct(
+        protected StockMovementService $movementService
+    ) {}
+
+    public function add(array $payload): void
+    {
+        DB::transaction(function () use ($payload) {
+
+            $organizationId = $payload['organization_id'];
+            $locationId     = $payload['stock_location_id'];
+            $variantId      = $payload['product_variant_id'];
+            $quantity       = $payload['quantity'];
+            $unitCost       = $payload['unit_cost'];
+
+            /*
+            |--------------------------------------------------------------------------
+            | 1. Create Inventory Batch
+            |--------------------------------------------------------------------------
+            */
+
+            $batch = InventoryBatch::create([
+                'product_variant_id' => $variantId,
+                'batch_number'       => $payload['batch_number'],
+                'manufacturing_date' => $payload['manufacturing_date'] ?? null,
+                'expiry_date'        => $payload['expiry_date'] ?? null,
+                'initial_cost'       => $unitCost,
+                'remaining_quantity' => $quantity,
+                'mrp'                => $payload['mrp'] ?? null,
+                'warranty_months'    => $payload['warranty_months'] ?? null,
+                'status'             => 'open',
+            ]);
+
+            /*
+            |--------------------------------------------------------------------------
+            | 2. Create Ledger Entry
+            |--------------------------------------------------------------------------
+            */
+
+            $this->movementService->move([
+                'organization_id'     => $organizationId,
+                'stock_location_id'   => $locationId,
+                'product_variant_id'  => $variantId,
+                'inventory_batch_id'  => $batch->id,
+                'quantity'            => $quantity,
+                'unit_cost'           => $unitCost,
+                'transaction_type'    => $payload['transaction_type'],
+                'reference_type'      => $payload['reference_type'] ?? null,
+                'reference_id'        => $payload['reference_id'] ?? null,
+                'created_by'          => $payload['created_by'] ?? null,
+            ]);
+
+            /*
+            |--------------------------------------------------------------------------
+            | 3. Update Weighted Average
+            |--------------------------------------------------------------------------
+            */
+
+            $balance = InventoryBalance::firstOrCreate([
+                'organization_id'    => $organizationId,
+                'stock_location_id'  => $locationId,
+                'product_variant_id' => $variantId,
+                'inventory_batch_id' => null,
+            ], [
+                'quantity' => 0,
+                'avg_cost' => 0,
+            ]);
+
+            $oldQty = $balance->quantity;
+            $oldAvg = $balance->avg_cost;
+
+            $newQty = $oldQty + $quantity;
+
+            $newAvg = $newQty == 0
+                ? 0
+                : (($oldQty * $oldAvg) + ($quantity * $unitCost)) / $newQty;
+
+            $balance->update([
+                'quantity' => $newQty,
+                'avg_cost' => $newAvg,
+            ]);
+        });
+    }
+}
+<?php
+
+namespace App\Services\Inventory;
+
+use App\Models\Inventory\StockLocation;
+use App\Models\Inventory\InventoryBalance;
+use App\Models\Inventory\InventoryLedger;
+use App\Models\Inventory\InventoryReservation;
+
+class StockLocationService
+{
+    public function paginate(int $organizationId, array $filters, int $perPage)
+    {
+        return StockLocation::query()
+            ->where('organization_id', $organizationId)
+            ->with('locatable')
+            ->when(isset($filters['search']), fn($q) =>
+                $q->where('name','like',"%{$filters['search']}%")
+            )
+            ->paginate($perPage);
+    }
+
+    public function create(array $data)
+    {
+        return StockLocation::create($data);
+    }
+
+    public function find(int $organizationId, int $id)
+    {
+        return StockLocation::where('organization_id',$organizationId)
+            ->where('id',$id)
+            ->with('locatable')
+            ->first();
+    }
+
+    public function findWithTrashed(int $organizationId, int $id)
+    {
+        return StockLocation::withTrashed()
+            ->where('organization_id',$organizationId)
+            ->where('id',$id)
+            ->first();
+    }
+
+    public function update(StockLocation $location, array $data)
+    {
+        $location->update($data);
+        return $location;
+    }
+
+    public function delete(StockLocation $location)
+    {
+        $location->delete();
+    }
+
+    public function restore(StockLocation $location)
+    {
+        $location->restore();
+    }
+
+    public function forceDelete(StockLocation $location)
+    {
+        $hasBalance = InventoryBalance::where(
+            'stock_location_id',$location->id
+        )->exists();
+
+        $hasLedger = InventoryLedger::where(
+            'stock_location_id',$location->id
+        )->exists();
+
+        $hasReservation = InventoryReservation::where(
+            'stock_location_id',$location->id
+        )->exists();
+
+        if ($hasBalance || $hasLedger || $hasReservation) {
+            throw new \Exception(
+                'Cannot permanently delete location with inventory history.'
+            );
+        }
+
+        $location->forceDelete();
+    }
+}
+<?php
+
+namespace App\Services\Inventory;
+
+use App\Models\Inventory\Unit;
+
+class UnitService
+{
+    public function paginate(int $organizationId, array $filters, int $perPage)
+    {
+        return Unit::query()
+            ->where('organization_id', $organizationId)
+
+            ->when(
+                filled($filters['search'] ?? null),
+                fn ($q) =>
+                    $q->where(function ($q2) use ($filters) {
+                        $search = trim($filters['search']);
+                        $q2->where('name', 'like', "%{$search}%")
+                           ->orWhere('short_name', 'like', "%{$search}%");
+                    })
+            )
+
+            ->paginate($perPage);
+    }
+
+    public function create(array $data)
+    {
+        return Unit::create($data);
+    }
+
+    public function find(int $organizationId, int $id)
+    {
+        return Unit::where('organization_id', $organizationId)
+            ->findOrFail($id);
+    }
+
+    public function findWithTrashed(int $organizationId, int $id)
+    {
+        return Unit::withTrashed()
+            ->where('organization_id', $organizationId)
+            ->findOrFail($id);
+    }
+
+    public function update(Unit $unit, array $data)
+    {
+        $unit->update($data);
+        return $unit;
+    }
+
+    public function delete(Unit $unit)
+    {
+        $unit->delete();
+    }
+
+    public function restore(Unit $unit)
+    {
+        $unit->restore();
+    }
+
+    public function forceDelete(Unit $unit)
+    {
+        $unit->forceDelete();
+    }
+}
+<?php
+
+namespace App\Services\Inventory;
+
+use App\Models\Inventory\Variation;
+
+class VariationService
+{
+    public function paginate(int $organizationId, int $perPage)
+    {
+        return Variation::query()
+            ->where('organization_id', $organizationId)
+            ->paginate($perPage);
+    }
+
+    public function create(array $data)
+    {
+        return Variation::create($data);
+    }
+
+    public function find(int $organizationId, int $id)
+    {
+        return Variation::where('organization_id', $organizationId)
+            ->findOrFail($id);
+    }
+
+    public function findWithTrashed(int $organizationId, int $id)
+    {
+        return Variation::withTrashed()
+            ->where('organization_id', $organizationId)
+            ->findOrFail($id);
+    }
+
+    public function update(Variation $variation, array $data)
+    {
+        $variation->update($data);
+        return $variation;
+    }
+
+    public function delete(Variation $variation)
+    {
+        $variation->delete();
+    }
+
+    public function restore(Variation $variation)
+    {
+        $variation->restore();
+    }
+
+    public function forceDelete(Variation $variation)
+    {
+        $variation->forceDelete();
+    }
+}
+<?php
+
+namespace App\Services\Inventory;
+
+use App\Models\Inventory\VariationValue;
+
+class VariationValueService
+{
+    public function paginate(int $variationId, int $perPage)
+    {
+        return VariationValue::query()
+            ->where('variation_id', $variationId)
+            ->paginate($perPage);
+    }
+
+    public function create(array $data)
+    {
+        return VariationValue::create($data);
+    }
+
+    public function find(int $variationId, int $id)
+    {
+        return VariationValue::where('variation_id', $variationId)
+            ->findOrFail($id);
+    }
+
+    public function findWithTrashed(int $variationId, int $id)
+    {
+        return VariationValue::withTrashed()
+            ->where('variation_id', $variationId)
+            ->findOrFail($id);
+    }
+
+    public function update(VariationValue $value, array $data)
+    {
+        $value->update($data);
+        return $value;
+    }
+
+    public function delete(VariationValue $value)
+    {
+        $value->delete();
+    }
+
+    public function restore(VariationValue $value)
+    {
+        $value->restore();
+    }
+
+    public function forceDelete(VariationValue $value)
+    {
+        $value->forceDelete();
+    }
+}
+<?php
+namespace App\Services\Inventory\Adjustment;
+
+class StockAdjustmentService
+{
+    //
+}
+<?php
+
+namespace App\Services\Inventory\Core;
+
+use App\Models\Inventory\InventoryCondition;
+use RuntimeException;
+
+class ConditionService
+{
+    public function paginate(int $organizationId, int $perPage = 15)
+    {
+        return InventoryCondition::where('organization_id', $organizationId)
+            ->paginate($perPage);
+    }
+
+    public function find(int $organizationId, int $id): InventoryCondition
+    {
+        return InventoryCondition::where('organization_id', $organizationId)
+            ->where('id', $id)
+            ->firstOrFail();
+    }
+
+    public function findWithTrashed(int $organizationId, int $id): InventoryCondition
+    {
+        return InventoryCondition::withTrashed()
+            ->where('organization_id', $organizationId)
+            ->where('id', $id)
+            ->firstOrFail();
+    }
+
+    public function create(array $data): InventoryCondition
+    {
+        return InventoryCondition::create($data);
+    }
+
+    public function update(InventoryCondition $condition, array $data): void
+    {
+        $condition->update($data);
+    }
+
+    public function delete(InventoryCondition $condition): void
+    {
+        $condition->delete();
+    }
+
+    public function restore(InventoryCondition $condition): void
+    {
+        if (! $condition->trashed()) {
+            throw new RuntimeException("Condition is not deleted.");
+        }
+
+        $condition->restore();
+    }
+
+    public function forceDelete(InventoryCondition $condition): void
+    {
+        $condition->forceDelete();
+    }
+
+    public function getId(string $code, int $organizationId): int
+    {
+        return InventoryCondition::query()
+            ->where('organization_id', $organizationId)
+            ->where('code', $code)
+            ->value('id')
+            ?? throw new RuntimeException("Condition {$code} not found.");
+    }
+
+}
+<?php
+
+namespace App\Services\Inventory\Core;
+
+use App\Models\Inventory\InventoryBalance;
+use RuntimeException;
+
+class InventoryBalanceService
+{
+    protected int $scale = 6;
+
+    public function adjust(
+        int $organizationId,
+        int $stockLocationId,
+        int $variantId,
+        ?int $batchId,
+        int $conditionId,
+        float $quantity,
+        float $unitCost
+    ): void {
+
+        $balance = InventoryBalance::query()
+            ->where('organization_id', $organizationId)
+            ->where('stock_location_id', $stockLocationId)
+            ->where('product_variant_id', $variantId)
+            ->where('inventory_batch_id', $batchId)
+            ->where('condition_id', $conditionId)
+            ->lockForUpdate()
+            ->first();
+
+        if (! $balance) {
+            $balance = InventoryBalance::create([
+                'organization_id'    => $organizationId,
+                'stock_location_id'  => $stockLocationId,
+                'product_variant_id' => $variantId,
+                'inventory_batch_id' => $batchId,
+                'condition_id'       => $conditionId,
+                'quantity'           => 0,
+                'reserved_quantity'  => 0,
+                'min_stock'          => 0,
+                'reorder_point'      => 0,
+                'avg_cost'           => 0,
+            ]);
+        }
+
+        $currentQty = (float) $balance->quantity;
+        $newQty     = round($currentQty + $quantity, $this->scale);
+
+        if ($newQty < 0) {
+            throw new RuntimeException("Insufficient stock.");
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Weighted Average Calculation
+        |--------------------------------------------------------------------------
+        | Only apply when:
+        | - inbound movement
+        | - no batch (WAVG mode)
+        | - condition is sellable (optional business rule)
+        */
+        if ($quantity > 0 && $batchId === null) {
+
+            $currentAvg = (float) $balance->avg_cost;
+
+            $newAvg = $currentQty > 0
+                ? (($currentQty * $currentAvg) + ($quantity * $unitCost))
+                    / ($currentQty + $quantity)
+                : $unitCost;
+
+            $balance->avg_cost = number_format($newAvg, $this->scale, '.', '');
+        }
+
+        $balance->quantity = number_format($newQty, $this->scale, '.', '');
+
+        $balance->save();
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Reservation Adjustment
+    |--------------------------------------------------------------------------
+    */
+
+    public function adjustReserved(
+        int $organizationId,
+        int $stockLocationId,
+        int $variantId,
+        ?int $batchId,
+        int $conditionId,
+        float $quantity
+    ): void {
+
+        $balance = InventoryBalance::query()
+            ->where('organization_id', $organizationId)
+            ->where('stock_location_id', $stockLocationId)
+            ->where('product_variant_id', $variantId)
+            ->where('inventory_batch_id', $batchId)
+            ->where('condition_id', $conditionId)
+            ->lockForUpdate()
+            ->first();
+
+        if (! $balance) {
+            throw new RuntimeException("No balance found for reservation.");
+        }
+
+        $newReserved = round(
+            (float)$balance->reserved_quantity + $quantity,
+            $this->scale
+        );
+
+        if ($newReserved < 0) {
+            throw new RuntimeException("Invalid reservation adjustment.");
+        }
+
+        if ($newReserved > $balance->quantity) {
+            throw new RuntimeException("Cannot reserve more than available stock.");
+        }
+
+        $balance->reserved_quantity = number_format($newReserved, $this->scale, '.', '');
+        $balance->save();
+    }
+}
+<?php
+
+namespace App\Services\Inventory\Core;
+
+use App\Models\Inventory\InventoryLedger;
+
+class InventoryLedgerService
+{
+    public function record(array $data): InventoryLedger
+    {
+        return InventoryLedger::create($data);
+    }
+}
+<?php
+
+namespace App\Services\Inventory\Core;
+
+use App\Models\Inventory\StockLocation;
+use RuntimeException;
+
+class LocationService
+{
+    public function getLocationId(
+        int $organizationId,
+        string $type,
+        int $locatableId
+    ): int {
+
+        $location = StockLocation::query()
+            ->where('organization_id', $organizationId)
+            ->where('locatable_type', $type)
+            ->where('locatable_id', $locatableId)
+            ->first();
+
+        if (! $location) {
+            throw new RuntimeException("Location not found.");
+        }
+
+        return $location->id;
+    }
+
+    public function getTransitLocationId(int $organizationId): int
+    {
+        return StockLocation::query()
+            ->where('organization_id', $organizationId)
+            ->where('type', 'transit')
+            ->value('id')
+            ?? throw new RuntimeException("Transit location not configured.");
+    }
+}
+<?php
+
+namespace App\Services\Inventory\Core;
+
+use Illuminate\Support\Facades\DB;
+
+class StockMovementService
+{
+    public function __construct(
+        protected InventoryLedgerService $ledger,
+        protected InventoryBalanceService $balance
+    ) {}
+
+    public function move(array $payload): void
+    {
+        DB::transaction(function () use ($payload) {
+
+            $organizationId  = $payload['organization_id'];
+            $locationId      = $payload['stock_location_id'];
+            $variantId       = $payload['product_variant_id'];
+            $batchId         = $payload['inventory_batch_id'] ?? null;
+            $conditionId     = $payload['condition_id'];
+            $quantity        = (float) $payload['quantity'];
+            $unitCost        = (float) $payload['unit_cost'];
+            $transactionType = $payload['transaction_type'] ?? 'system';
+
+            $quantityIn  = $quantity > 0 ? $quantity : 0;
+            $quantityOut = $quantity < 0 ? abs($quantity) : 0;
+
+            $formattedUnitCost  = number_format($unitCost, 6, '.', '');
+            $formattedTotalCost = number_format($unitCost * abs($quantity), 6, '.', '');
+
+            // 1️⃣ Immutable Ledger Entry
+            $this->ledger->record([
+                'organization_id'    => $organizationId,
+                'stock_location_id'  => $locationId,
+                'product_variant_id' => $variantId,
+                'inventory_batch_id' => $batchId,
+                'condition_id'       => $conditionId,
+                'reference_type'     => $payload['reference_type'] ?? null,
+                'reference_id'       => $payload['reference_id'] ?? null,
+                'transaction_type'   => $transactionType,
+                'quantity_in'        => $quantityIn,
+                'quantity_out'       => $quantityOut,
+                'unit_cost'          => $formattedUnitCost,
+                'total_cost'         => $formattedTotalCost,
+                'created_by'         => $payload['created_by'] ?? null,
+            ]);
+
+            // 2️⃣ Update Balance
+            $this->balance->adjust(
+                $organizationId,
+                $locationId,
+                $variantId,
+                $batchId,
+                $conditionId,
+                $quantity,
+                $unitCost
+            );
+
+        });
+    }
+}
+<?php
+
+namespace App\Services\Inventory\Core;
+
+use App\Models\Inventory\ProductVariant;
+use App\Models\Inventory\SerialNumber;
+use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Facades\DB;
+use RuntimeException;
+
+class UniversalStockEngine
+{
+    public function __construct(
+        protected StockMovementService $movement
+    ) {}
+
+    /*
+    |--------------------------------------------------------------------------
+    | Universal Transfer Entry
+    |--------------------------------------------------------------------------
+    */
+
+    public function transfer(array $payload): void
+    {
+        DB::transaction(function () use ($payload) {
+
+            $variant = ProductVariant::query()
+                ->lockForUpdate()
+                ->findOrFail($payload['product_variant_id']);
+
+            $quantity = abs((float) $payload['quantity']);
+
+            if ($quantity <= 0) {
+                throw new RuntimeException("Invalid quantity.");
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | SERIAL TRACKED FLOW
+            |--------------------------------------------------------------------------
+            */
+
+            if ($variant->is_serial_tracked) {
+                $this->handleSerialTransfer($payload);
+                return;
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | QUANTITY BASED FLOW
+            |--------------------------------------------------------------------------
+            */
+
+            // 1️⃣ Deduct from source
+            $this->movement->move([
+                ...$payload,
+                'stock_location_id' => $payload['source_location_id'],
+                'condition_id'      => $payload['condition_from_id'],
+                'quantity'          => -$quantity,
+            ]);
+
+            // 2️⃣ Add to destination
+            $this->movement->move([
+                ...$payload,
+                'stock_location_id' => $payload['destination_location_id'],
+                'condition_id'      => $payload['condition_to_id'],
+                'quantity'          => $quantity,
+            ]);
+        });
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Serial Transfer Handler (Fully Typed)
+    |--------------------------------------------------------------------------
+    */
+
+    protected function handleSerialTransfer(array $payload): void
+    {
+        $serialIds = $payload['serial_ids'] ?? [];
+
+        if (empty($serialIds)) {
+            throw new RuntimeException("Serial IDs required.");
+        }
+
+        /** @var \Illuminate\Database\Eloquent\Collection<int, \App\Models\Inventory\SerialNumber> $serials */
+        $serials = SerialNumber::query()
+            ->where('organization_id', $payload['organization_id'])
+            ->where('product_variant_id', $payload['product_variant_id'])
+            ->whereIn('id', $serialIds)
+            ->lockForUpdate()
+            ->get();
+
+        if ($serials->count() !== count($serialIds)) {
+            throw new RuntimeException("Invalid or unauthorized serial detected.");
+        }
+
+        foreach ($serials as $serial) {
+
+            if ($serial->stock_location_id !== $payload['source_location_id']) {
+                throw new RuntimeException("Serial location mismatch.");
+            }
+
+            if ($serial->condition_id !== $payload['condition_from_id']) {
+                throw new RuntimeException("Serial condition mismatch.");
+            }
+
+            if (! in_array($serial->status, ['available','reserved','in_transit'])) {
+                throw new RuntimeException("Serial not transferable.");
+            }
+
+            $serial->stock_location_id = $payload['destination_location_id'];
+            $serial->condition_id      = $payload['condition_to_id'];
+            $serial->save();
+        }
+    }
+
+}
+<?php
+
+namespace App\Services\Inventory\Damage;
+
+use App\Services\Inventory\Core\StockMovementService;
+use App\Services\Inventory\Core\ConditionService;
+
+class DamageWorkflowService
+{
+    public function __construct(
+        protected StockMovementService $movement,
+        protected ConditionService $condition
+    ) {}
+
+    public function markDamaged(array $payload): void
+    {
+        $orgId = $payload['organization_id'];
+
+        $goodConditionId = $this->condition->getId('GOOD', $orgId);
+        $damagedConditionId = $this->condition->getId('DAMAGED', $orgId);
+
+        // 1️⃣ Remove from GOOD
+        $this->movement->move([
+            ...$payload,
+            'condition_id' => $goodConditionId,
+            'quantity' => -abs($payload['quantity']),
+            'transaction_type' => 'damage_out'
+        ]);
+
+        // 2️⃣ Add to DAMAGED
+        $this->movement->move([
+            ...$payload,
+            'condition_id' => $damagedConditionId,
+            'quantity' => abs($payload['quantity']),
+            'transaction_type' => 'damage_in'
+        ]);
+    }
+}
+<?php
+
+namespace App\Services\Inventory\Delivery;
+
+use App\Services\Inventory\Core\UniversalStockEngine;
+use App\Services\Inventory\Core\ConditionService;
+
+class DeliveryService
+{
+    public function __construct(
+        protected UniversalStockEngine $engine,
+        protected ConditionService $condition
+    ) {}
+
+    public function assignToRider(array $payload): void
+    {
+        $orgId = $payload['organization_id'];
+
+        $this->engine->transfer([
+            ...$payload,
+            'condition_from_id' => $this->condition->getId('GOOD', $orgId),
+            'condition_to_id'   => $this->condition->getId('TRANSIT', $orgId),
+            'transaction_type'  => 'rider_assigned',
+        ]);
+    }
+
+    public function deliver(array $payload): void
+    {
+        $orgId = $payload['organization_id'];
+
+        $this->engine->transfer([
+            ...$payload,
+            'condition_from_id' => $this->condition->getId('TRANSIT', $orgId),
+            'condition_to_id'   => $this->condition->getId('GOOD', $orgId),
+            'transaction_type'  => 'delivered',
+        ]);
+    }
+}
+<?php
+
+namespace App\Services\Inventory\Delivery;
+
+use App\Services\Inventory\Core\UniversalStockEngine;
+use App\Services\Inventory\Core\ConditionService;
+
+class ReverseLogisticsService
+{
+    public function __construct(
+        protected UniversalStockEngine $engine,
+        protected ConditionService $condition
+    ) {}
+
+    public function initiateReturn(array $payload): void
+    {
+        /*
+            Required payload:
+            - organization_id
+            - source_location_id (customer location)
+            - original_location_id (warehouse/outlet where delivery originated)
+            - product_variant_id
+            - inventory_batch_id
+            - quantity
+            - unit_cost
+            - reference_type
+            - reference_id
+            - created_by
+        */
+
+        $orgId = $payload['organization_id'];
+
+        $this->engine->transfer([
+            ...$payload,
+            'destination_location_id' => $payload['original_location_id'],
+            'condition_from_id' => $this->condition->getId('GOOD', $orgId),
+            'condition_to_id'   => $this->condition->getId('RETURNED', $orgId),
+            'transaction_type'  => 'reverse_pickup',
+        ]);
+    }
+}
+<?php
+
+namespace App\Services\Inventory\Delivery;
+
+use App\Models\Inventory\InventoryBalance;
+use App\Models\Inventory\SerialNumber;
+use RuntimeException;
+
+class RiderAccountabilityService
+{
+    public function validateRiderStock(
+        int $riderLocationId,
+        int $variantId,
+        float $quantity
+    ): void {
+
+        $available = InventoryBalance::query()
+            ->where('stock_location_id', $riderLocationId)
+            ->where('product_variant_id', $variantId)
+            ->sum('quantity');
+
+        if ($available < $quantity) {
+            throw new RuntimeException("Rider stock insufficient.");
+        }
+    }
+
+    public function validateSerialOwnership(
+        int $riderLocationId,
+        array $serialIds
+    ): void {
+
+        $count = SerialNumber::query()
+            ->whereIn('id', $serialIds)
+            ->where('stock_location_id', $riderLocationId)
+            ->count();
+
+        if ($count !== count($serialIds)) {
+            throw new RuntimeException("Serial mismatch for rider.");
+        }
+    }
+}
+<?php
+
+namespace App\Services\Inventory\Pricing;
+
+use App\Models\Inventory\PriceList;
+
+class PriceListService
+{
+    public function paginate(int $organizationId, array $filters, int $perPage)
+    {
+        return PriceList::query()
+            ->where('organization_id', $organizationId)
+
+            ->when(
+                filled($filters['search'] ?? null),
+                fn ($q) => $q->where('name', 'like', '%' . trim($filters['search']) . '%')
+            )
+
+            ->paginate($perPage);
+    }
+
+    public function create(int $organizationId, array $data)
+    {
+        $data['organization_id'] = $organizationId;
+        return PriceList::create($data);
+    }
+
+    public function find(int $organizationId, int $id)
+    {
+        return PriceList::where('organization_id', $organizationId)
+            ->findOrFail($id);
+    }
+
+    public function findWithTrashed(int $organizationId, int $id)
+    {
+        return PriceList::withTrashed()
+            ->where('organization_id', $organizationId)
+            ->findOrFail($id);
+    }
+
+    public function update(PriceList $priceList, array $data)
+    {
+        $priceList->update($data);
+        return $priceList;
+    }
+
+    public function delete(PriceList $priceList)
+    {
+        $priceList->delete();
+    }
+
+    public function restore(PriceList $priceList)
+    {
+        $priceList->restore();
+    }
+
+    public function forceDelete(PriceList $priceList)
+    {
+        $priceList->forceDelete();
+    }
+}
+<?php
+
+namespace App\Services\Inventory\Pricing;
+
+use App\Models\Inventory\PriceListItem;
+
+class PriceListItemService
+{
+    public function paginate(int $organizationId, int $priceListId, int $perPage)
+    {
+        return PriceListItem::query()
+            ->whereHas('priceList', fn ($q) =>
+                $q->where('organization_id', $organizationId)
+            )
+            ->where('price_list_id', $priceListId)
+            ->paginate($perPage);
+    }
+
+    public function create(int $organizationId, int $priceListId, array $data)
+    {
+        $data['price_list_id'] = $priceListId;
+
+        return PriceListItem::create($data);
+    }
+
+    public function find(int $organizationId, int $id)
+    {
+        return PriceListItem::whereHas('priceList', fn ($q) =>
+                $q->where('organization_id', $organizationId)
+            )
+            ->findOrFail($id);
+    }
+
+    public function update(PriceListItem $item, array $data)
+    {
+        $item->update($data);
+        return $item;
+    }
+
+    public function delete(PriceListItem $item)
+    {
+        $item->delete();
+    }
+}
+<?php
+
+namespace App\Services\Inventory\Pricing;
+
+use App\Models\Inventory\Promotion;
+
+class PromotionService
+{
+    public function paginate(int $organizationId, array $filters, int $perPage)
+    {
+        return Promotion::query()
+            ->where('organization_id', $organizationId)
+            ->when(
+                filled($filters['search'] ?? null),
+                fn ($q) => $q->where('name', 'like', '%' . trim($filters['search']) . '%')
+            )
+            ->paginate($perPage);
+    }
+
+    public function create(int $organizationId, array $data)
+    {
+        $data['organization_id'] = $organizationId;
+        return Promotion::create($data);
+    }
+
+    public function find(int $organizationId, int $id)
+    {
+        return Promotion::where('organization_id', $organizationId)
+            ->findOrFail($id);
+    }
+
+    public function update(Promotion $promotion, array $data)
+    {
+        $promotion->update($data);
+        return $promotion;
+    }
+
+    public function delete(Promotion $promotion)
+    {
+        $promotion->delete();
+    }
+}
+<?php
+
+namespace App\Services\Inventory\Pricing;
+
+use App\Models\Inventory\PromotionScope;
+
+class PromotionScopeService
+{
+    public function create(int $organizationId, array $data)
+    {
+        return PromotionScope::create($data);
+    }
+
+    public function delete(int $id)
+    {
+        PromotionScope::findOrFail($id)->delete();
+    }
+}
+<?php
+
+namespace App\Services\Inventory\Pricing;
+
+use App\Models\Inventory\PromotionTarget;
+
+class PromotionTargetService
+{
+    public function create(int $organizationId, array $data)
+    {
+        return PromotionTarget::create($data);
+    }
+
+    public function delete(int $id)
+    {
+        PromotionTarget::findOrFail($id)->delete();
+    }
+}
+<?php
+
+namespace App\Services\Inventory\Pricing;
+
+use App\Models\Inventory\Promotion;
+use Illuminate\Support\Collection;
+
+class PromotionEngineService
+{
+    public function apply(Collection $items, float $subtotal, int $organizationId): float
+    {
+        $discount = 0;
+
+        $promotions = Promotion::query()
+            ->where('organization_id', $organizationId)
+            ->where('is_active', true)
+            ->where('start_date', '<=', now())
+            ->where('end_date', '>=', now())
+            ->orderByDesc('priority')
+            ->get();
+
+        foreach ($promotions as $promotion) {
+
+            /*
+            |--------------------------------------------------------------------------
+            | Min Order Check
+            |--------------------------------------------------------------------------
+            */
+
+            if ($promotion->min_order_amount &&
+                $subtotal < $promotion->min_order_amount) {
+                continue;
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | Calculate Discount
+            |--------------------------------------------------------------------------
+            */
+
+            $promoDiscount = match ($promotion->type) {
+                'percentage' => $subtotal * ($promotion->value / 100),
+                'fixed' => $promotion->value,
+            };
+
+            $discount += $promoDiscount;
+
+            /*
+            |--------------------------------------------------------------------------
+            | Stop if not stackable
+            |--------------------------------------------------------------------------
+            */
+
+            if (!$promotion->stackable) {
+                break;
+            }
+        }
+
+        return $discount;
+    }
+}
+<?php
+
+namespace App\Services\Inventory\Pricing;
+
+use App\Models\Inventory\Coupon;
+use Illuminate\Validation\ValidationException;
+
+class CouponService
+{
+    public function paginate(int $organizationId, int $perPage)
+    {
+        return Coupon::where('organization_id', $organizationId)
+            ->paginate($perPage);
+    }
+
+    public function create(int $organizationId, array $data)
+    {
+        $data['organization_id'] = $organizationId;
+        return Coupon::create($data);
+    }
+
+    public function find(int $organizationId, int $id)
+    {
+        return Coupon::where('organization_id', $organizationId)
+            ->findOrFail($id);
+    }
+
+    public function update(Coupon $coupon, array $data)
+    {
+        $coupon->update($data);
+        return $coupon;
+    }
+
+    public function delete(Coupon $coupon)
+    {
+        $coupon->delete();
+    }
+
+    public function apply(int $organizationId, array $data)
+    {
+        $coupon = Coupon::where('organization_id', $organizationId)
+            ->where('code', $data['code'])
+            ->firstOrFail();
+
+        if (!$coupon->is_active) {
+            throw ValidationException::withMessages(['code' => 'Coupon inactive']);
+        }
+
+        if ($coupon->usage_limit && $coupon->used_count >= $coupon->usage_limit) {
+            throw ValidationException::withMessages(['code' => 'Usage limit exceeded']);
+        }
+
+        $subtotal = $data['subtotal'];
+
+        $discount = $coupon->type === 'percentage'
+            ? $subtotal * ($coupon->value / 100)
+            : $coupon->value;
+
+        return [
+            'coupon_id' => $coupon->id,
+            'discount' => $discount,
+            'total' => max(0, $subtotal - $discount),
+        ];
+    }
+}
+<?php
+
+namespace App\Services\Inventory\Pricing;
+
+use App\Models\Inventory\CouponScope;
+
+class CouponScopeService
+{
+    public function create(int $organizationId, array $data)
+    {
+        return CouponScope::create($data);
+    }
+
+    public function delete(int $id)
+    {
+        CouponScope::findOrFail($id)->delete();
+    }
+}
+<?php
+
+namespace App\Services\Inventory\Pricing;
+
+use App\Models\Inventory\CouponTarget;
+
+class CouponTargetService
+{
+    public function create(int $organizationId, array $data)
+    {
+        return CouponTarget::create($data);
+    }
+
+    public function delete(int $id)
+    {
+        CouponTarget::findOrFail($id)->delete();
+    }
+}
+<?php
+
+namespace App\Services\Inventory\Pricing;
+
+use App\Models\Inventory\CustomerCoupon;
+
+class CustomerCouponService
+{
+    public function assign(int $organizationId, array $data)
+    {
+        return CustomerCoupon::create($data);
+    }
+}
+<?php
+
+namespace App\Services\Inventory\Pricing;
+
+use App\Services\Inventory\Pricing\PromotionEngineService;
+
+class CartCalculationService
+{
+    public function calculate($context, array $data)
+    {
+        $items = collect($data['items']);
+
+        $subtotal = $items->sum(fn ($item) =>
+            $item['price'] * $item['quantity']
+        );
+
+        $discount = app(PromotionEngineService::class)
+            ->apply($items, $subtotal);
+
+        return [
+            'subtotal' => $subtotal,
+            'discount' => $discount,
+            'total' => $subtotal - $discount,
+        ];
+    }
+}
+<?php
+
+namespace App\Services\Inventory\Pricing;
+
+use App\Models\Inventory\ProductVariant;
+use App\Models\Inventory\PriceList;
+use Illuminate\Support\Facades\Cache;
+
+class PriceResolverService
+{
+    public function resolve(ProductVariant $variant, $context): float
+    {
+        $cacheKey = sprintf(
+            'price:%s:%s:%s',
+            $context->organization_id,
+            $context->branch_id ?? 'org',
+            $variant->id
+        );
+
+        return Cache::tags(['pricing'])->remember($cacheKey, 3600, function () use ($variant, $context) {
+
+            /*
+            |--------------------------------------------------------------------------
+            | 1️⃣ Branch / Location Override
+            |--------------------------------------------------------------------------
+            */
+
+            $override = $variant->prices()
+                ->where('priceable_type', $context->branch_type ?? null)
+                ->where('priceable_id', $context->branch_id ?? null)
+                ->first();
+
+            if ($override && $override->sale_price !== null) {
+                return (float) $override->sale_price;
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | 2️⃣ Active Price Lists (Priority Based)
+            |--------------------------------------------------------------------------
+            */
+
+            $priceList = PriceList::query()
+                ->where('organization_id', $context->organization_id)
+                ->where('is_active', true)
+                ->where(function ($q) {
+                    $q->whereNull('starts_at')
+                      ->orWhere('starts_at', '<=', now());
+                })
+                ->where(function ($q) {
+                    $q->whereNull('ends_at')
+                      ->orWhere('ends_at', '>=', now());
+                })
+                ->orderByDesc('priority')
+                ->first();
+
+            if ($priceList) {
+                $item = $priceList->items()
+                    ->where('product_variant_id', $variant->id)
+                    ->first();
+
+                if ($item) {
+                    return (float) $item->price;
+                }
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | 3️⃣ Fallback
+            |--------------------------------------------------------------------------
+            */
+
+            return (float) $variant->sale_price;
+        });
+    }
+}
+<?php
+
+namespace App\Services\Inventory\Pricing;
+
+use App\Models\Inventory\ProductVariant;
+use App\Services\Inventory\Pricing\PriceResolverService;
+
+class PriceSimulationService
+{
+    public function simulate($context, array $data)
+    {
+        $variant = ProductVariant::findOrFail($data['product_variant_id']);
+
+        $price = app(PriceResolverService::class)
+            ->resolve($variant, $context);
+
+        return [
+            'product_variant_id' => $variant->id,
+            'base_price' => $price,
+            'quantity' => $data['quantity'],
+            'subtotal' => $price * $data['quantity'],
+        ];
+    }
+}
+<?php
+
+namespace App\Services\Inventory\Reservation;
+
+use App\Models\Inventory\InventoryReservation;
+use App\Models\Inventory\InventoryBalance;
+use App\Models\Inventory\SerialNumber;
+use App\Models\Inventory\ProductVariant;
+use Illuminate\Support\Facades\DB;
+use RuntimeException;
+
+class ReservationEngine
+{
+    protected int $scale = 6;
+
+    public function reserve(array $payload): InventoryReservation
+    {
+        return DB::transaction(function () use ($payload) {
+
+            /** @var ProductVariant $variant */
+            $variant = $payload['variant'];
+
+            return $variant->is_serial_tracked
+                ? $this->reserveSerial($payload, $variant)
+                : $this->reserveQuantity($payload);
+        });
+    }
+
+    protected function reserveSerial(array $payload, ProductVariant $variant): InventoryReservation
+    {
+        $qty = (int) $payload['quantity'];
+
+        /** @var \Illuminate\Database\Eloquent\Collection<int, SerialNumber> $serials */
+        $serials = SerialNumber::query()
+            ->select('serial_numbers.*')
+            ->where('organization_id', $payload['organization_id'])
+            ->where('stock_location_id', $payload['stock_location_id'])
+            ->where('product_variant_id', $variant->id)
+            ->where('condition_id', $payload['condition_id'])
+            ->where('status', 'available')
+            ->lockForUpdate()
+            ->limit($qty)
+            ->get();
+
+        if ($serials->count() < $qty) {
+            throw new RuntimeException("Not enough serials available.");
+        }
+
+        $reservation = InventoryReservation::create([
+            ...$payload,
+            'quantity' => $qty,
+            'status'   => 'active',
+        ]);
+
+        foreach ($serials as $serial) {
+
+            $serial->status = 'reserved';
+            $serial->reserved_at = now();
+            $serial->save();
+
+            $reservation->serials()->attach($serial->id);
+        }
+
+        return $reservation;
+    }
+
+    protected function reserveQuantity(array $payload): InventoryReservation
+    {
+        $balance = $this->lockBalance($payload);
+
+        $available = $balance->quantity - $balance->reserved_quantity;
+
+        if ($available < $payload['quantity']) {
+            throw new RuntimeException("Insufficient stock.");
+        }
+
+        $balance->reserved_quantity += $payload['quantity'];
+        $balance->save();
+
+        return InventoryReservation::create([
+            ...$payload,
+            'status' => 'active',
+        ]);
+    }
+
+    public function consume(InventoryReservation $reservation): void
+    {
+        DB::transaction(function () use ($reservation) {
+
+            if ($reservation->variant->is_serial_tracked) {
+
+                foreach ($reservation->serials as $serial) {
+                    $serial->status = 'in_transit';
+                    $serial->save();
+                }
+
+            } else {
+
+                $balance = $this->lockBalance($reservation->toArray());
+                $balance->reserved_quantity -= $reservation->quantity;
+                $balance->save();
+            }
+
+            $reservation->update([
+                'status'      => 'consumed',
+                'consumed_at' => now(),
+            ]);
+        });
+    }
+
+    public function release(InventoryReservation $reservation): void
+    {
+        DB::transaction(function () use ($reservation) {
+
+            if ($reservation->variant->is_serial_tracked) {
+
+                foreach ($reservation->serials as $serial) {
+                    $serial->status = 'available';
+                    $serial->reserved_at = null;
+                    $serial->save();
+                }
+
+            } else {
+
+                $balance = $this->lockBalance($reservation->toArray());
+                $balance->reserved_quantity -= $reservation->quantity;
+                $balance->save();
+            }
+
+            $reservation->update([
+                'status'      => 'released',
+                'released_at' => now(),
+            ]);
+        });
+    }
+
+    protected function lockBalance(array $payload): InventoryBalance
+    {
+        return InventoryBalance::query()
+            ->where('organization_id', $payload['organization_id'])
+            ->where('stock_location_id', $payload['stock_location_id'])
+            ->where('product_variant_id', $payload['product_variant_id'])
+            ->where('inventory_batch_id', $payload['inventory_batch_id'])
+            ->where('condition_id', $payload['condition_id'])
+            ->lockForUpdate()
+            ->firstOrFail();
+    }
+}
+<?php
+
+namespace App\Services\Inventory\Serial;
+
+use App\Models\Inventory\SerialNumber;
+
+class SerialTrackingService
+{
+    public function moveSerial(
+        int $serialId,
+        int $newLocationId,
+        string $status
+    ): void {
+
+        $serial = SerialNumber::findOrFail($serialId);
+
+        $serial->update([
+            'stock_location_id' => $newLocationId,
+            'status' => $status,
+        ]);
+    }
+}
+<?php
+
+namespace App\Services\Inventory\Transfer;
+
+use App\Models\Inventory\TransferOrder;
+use App\Models\Inventory\TransferOrderItem;
+use Illuminate\Support\Facades\DB;
+use RuntimeException;
+
+class TransferOrderService
+{
+    public function __construct(
+        protected TransferAllocationService $allocation,
+        protected TransferDispatchService $dispatch,
+        protected TransferReceiveService $receive
+    ) {}
+
+    /*
+    |--------------------------------------------------------------------------
+    | Create
+    |--------------------------------------------------------------------------
+    */
+
+    public function create(array $data): TransferOrder
+    {
+        return DB::transaction(function () use ($data) {
+
+            $order = TransferOrder::create([
+                ...$data,
+                'status' => 'draft',
+            ]);
+
+            foreach ($data['items'] as $item) {
+
+                $order->items()->create([
+                    'organization_id'    => $order->organization_id,
+                    'product_variant_id' => $item['product_variant_id'],
+                    'inventory_batch_id' => $item['inventory_batch_id'] ?? null,
+                    'quantity'           => $item['quantity'],
+                    'unit_cost'          => $item['unit_cost'],
+                    'line_total'         => $item['quantity'] * $item['unit_cost'],
+                ]);
+            }
+
+            return $order->load('items');
+        });
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Allocate
+    |--------------------------------------------------------------------------
+    */
+
+    public function allocate(TransferOrder $order): void
+    {
+        if ($order->status !== 'draft') {
+            throw new RuntimeException("Only draft orders can be allocated.");
+        }
+
+        DB::transaction(function () use ($order) {
+
+            foreach ($order->items as $item) {
+                $this->allocation->allocateItem($order, $item);
+            }
+
+            $order->update([
+                'status' => 'approved',
+            ]);
+        });
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Dispatch (Partial Supported)
+    |--------------------------------------------------------------------------
+    */
+
+    public function dispatch(TransferOrder $order, array $dispatchItems, int $userId): void
+    {
+        if (! in_array($order->status, ['approved','in_transit'])) {
+            throw new RuntimeException("Order not dispatchable.");
+        }
+
+        DB::transaction(function () use ($order, $dispatchItems, $userId) {
+
+            foreach ($dispatchItems as $payload) {
+                $this->dispatch->dispatchItem($order, $payload, $userId);
+            }
+
+            $order->update([
+                'status' => 'in_transit',
+                'in_transit_by' => $userId,
+                'in_transit_at' => now(),
+            ]);
+        });
+    }
+
+    public function dispatchSerials(TransferOrderItem $item)
+    {
+        foreach ($item->reservation->serials as $serial) {
+
+            if ($serial->status !== 'reserved') {
+                throw new RuntimeException("Serial not reserved.");
+            }
+
+            $serial->update([
+                'status' => 'in_transit',
+                'stock_location_id' => $this->getTransitLocationId()
+            ]);
+        }
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Receive (Partial Supported)
+    |--------------------------------------------------------------------------
+    */
+
+    public function receive(TransferOrder $order, array $receiveItems, int $userId): void
+    {
+        if ($order->status !== 'in_transit') {
+            throw new RuntimeException("Order not in transit.");
+        }
+
+        DB::transaction(function () use ($order, $receiveItems, $userId) {
+
+            foreach ($receiveItems as $payload) {
+                $this->receive->receiveItem($order, $payload, $userId);
+            }
+
+            // If all received → completed
+            if ($this->receive->isFullyReceived($order)) {
+                $order->update([
+                    'status' => 'completed',
+                    'completed_by' => $userId,
+                    'completed_at' => now(),
+                ]);
+            }
+        });
+    }
+
+    public function receiveSerials(TransferOrderItem $item, int $destinationLocationId)
+    {
+        foreach ($item->reservation->serials as $serial) {
+
+            if ($serial->status !== 'in_transit') {
+                throw new RuntimeException("Serial not in transit.");
+            }
+
+            $serial->update([
+                'status' => 'available',
+                'stock_location_id' => $destinationLocationId
+            ]);
+        }
+    }
+
+    protected function getTransitLocationId(int $organizationId): int
+    {
+        return \App\Models\Inventory\StockLocation::query()
+            ->where('organization_id', $organizationId)
+            ->where('type', 'transit') // add this column if missing
+            ->value('id')
+            ?? throw new RuntimeException("Transit location not configured.");
+    }
+
+
+}
+<?php
+
+namespace App\Services\Inventory\Transfer;
+
+use App\Models\Inventory\TransferOrder;
+use App\Models\Inventory\TransferOrderItem;
+use App\Services\Inventory\Core\InventoryBalanceService;
+use RuntimeException;
+
+class TransferAllocationService
+{
+    public function __construct(
+        protected InventoryBalanceService $balance
+    ) {}
+
+    public function allocateItem(TransferOrder $order, TransferOrderItem $item): void
+    {
+        $available = $this->getAvailableQuantity(
+            $order,
+            $item
+        );
+
+        if ($available < $item->quantity) {
+            throw new RuntimeException("Insufficient stock for allocation.");
+        }
+
+        $item->update([
+            'allocated_quantity' => $item->quantity,
+            'is_allocated' => true,
+        ]);
+    }
+
+    protected function getAvailableQuantity(
+        TransferOrder $order,
+        TransferOrderItem $item
+    ): float {
+
+        return \App\Models\Inventory\InventoryBalance::query()
+            ->where('organization_id', $order->organization_id)
+            ->where('stock_location_id', $order->source_location_id)
+            ->where('product_variant_id', $item->product_variant_id)
+            ->sum('quantity');
+    }
+}
+<?php
+
+namespace App\Services\Inventory\Transfer;
+
+use App\Models\Inventory\TransferOrder;
+use App\Services\Inventory\Core\StockMovementService;
+use RuntimeException;
+
+class TransferDispatchService
+{
+    public function __construct(
+        protected StockMovementService $movement
+    ) {}
+
+    public function dispatchItem(
+        TransferOrder $order,
+        array $payload,
+        int $userId
+    ): void {
+
+        $item = $order->items()
+            ->where('id', $payload['item_id'])
+            ->firstOrFail();
+
+        if ($payload['quantity'] > $item->allocated_quantity) {
+            throw new RuntimeException("Dispatch exceeds allocated.");
+        }
+
+        // 1️⃣ Deduct from source
+        $this->movement->move([
+            'organization_id'    => $order->organization_id,
+            'stock_location_id'  => $order->source_location_id,
+            'product_variant_id' => $item->product_variant_id,
+            'inventory_batch_id' => $item->inventory_batch_id,
+            'condition_id'       => 1,
+            'quantity'           => -$payload['quantity'],
+            'unit_cost'          => $item->unit_cost,
+            'transaction_type'   => 'transfer_dispatch',
+            'reference_type'     => TransferOrder::class,
+            'reference_id'       => $order->id,
+            'created_by'         => $userId,
+        ]);
+
+        // 2️⃣ Add to transit
+        $this->movement->move([
+            'organization_id'    => $order->organization_id,
+            'stock_location_id'  => $order->destination_location_id,
+            'product_variant_id' => $item->product_variant_id,
+            'inventory_batch_id' => $item->inventory_batch_id,
+            'condition_id'       => 1,
+            'quantity'           => $payload['quantity'],
+            'unit_cost'          => $item->unit_cost,
+            'transaction_type'   => 'transfer_in_transit',
+            'reference_type'     => TransferOrder::class,
+            'reference_id'       => $order->id,
+            'created_by'         => $userId,
+        ]);
+    }
+}
+<?php
+
+namespace App\Services\Inventory\Transfer;
+
+use App\Models\Inventory\TransferOrder;
+use App\Services\Inventory\Core\UniversalStockEngine;
+use App\Services\Inventory\Core\ConditionService;
+use App\Services\Inventory\Core\LocationService;
+
+class TransferReceiveService
+{
+    public function __construct(
+        protected UniversalStockEngine $engine,
+        protected ConditionService $condition,
+        protected LocationService $location
+    ) {}
+
+    public function receiveItem(
+        TransferOrder $order,
+        array $payload,
+        int $userId
+    ): void {
+
+        $item = $order->items()
+            ->where('id', $payload['item_id'])
+            ->firstOrFail();
+
+        $orgId = $order->organization_id;
+
+        $transitConditionId = $this->condition->getId('TRANSIT', $orgId);
+        $goodConditionId    = $this->condition->getId('GOOD', $orgId);
+
+        $transitLocationId = $this->location->getTransitLocationId($orgId);
+
+        $this->engine->transfer([
+            'organization_id'       => $orgId,
+            'source_location_id'    => $transitLocationId,
+            'destination_location_id'=> $order->destination_location_id,
+            'product_variant_id'    => $item->product_variant_id,
+            'inventory_batch_id'    => $item->inventory_batch_id,
+            'condition_from_id'     => $transitConditionId,
+            'condition_to_id'       => $goodConditionId,
+            'quantity'              => abs($payload['quantity']),
+            'unit_cost'             => $item->unit_cost,
+            'reference_type'        => TransferOrder::class,
+            'reference_id'          => $order->id,
+            'created_by'            => $userId,
+            'transaction_type'      => 'transfer_received',
+        ]);
+    }
+
+    public function isFullyReceived(TransferOrder $order): bool
+    {
+        return ! $order->items()
+            ->whereColumn('allocated_quantity', '>', 'received_quantity')
+            ->exists();
+    }
+}

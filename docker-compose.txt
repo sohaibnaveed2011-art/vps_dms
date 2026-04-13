@@ -1,0 +1,65 @@
+services:
+  admin_db:
+    image: mysql:8.0
+    container_name: admin_db
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${DB_DATABASE}
+      MYSQL_USER: ${DB_USERNAME}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - dbdata:/var/lib/mysql
+    ports:
+      - "33077:3306"
+
+  admin:
+    build: .
+    container_name: dms_admin_app
+    restart: unless-stopped
+    tty: true
+    working_dir: /app
+    volumes:
+      - ./:/app
+    ports:
+      - "8000:8000"
+    environment:
+      DB_HOST: admin_db
+      DB_PORT: 3306
+      MYSQL_DATABASE: ${DB_NAME:-dms}
+      MYSQL_USER: ${DB_USER:-naveed}
+      MYSQL_PASSWORD: ${DB_PASS:-admin}
+      MYSQL_ROOT_PASSWORD: ${ROOT_PASS:-root}
+    depends_on:
+      - admin_db
+
+  admin_queue:
+    build: .
+    container_name: dms_admin_queue
+    restart: unless-stopped
+    # COMMENT OUT the command below if it keeps restarting
+    command: php artisan queue:work
+    volumes:
+      - ./:/app
+    environment:
+      DB_HOST: admin_db
+      DB_PORT: 3306
+      DB_DATABASE: ${DB_DATABASE:-dms}
+      DB_USERNAME: ${DB_USERNAME:-naveed}
+      DB_PASSWORD: ${DB_PASSWORD:-admin}
+    depends_on:
+      - admin_db
+  phpmyadmin:
+    image: phpmyadmin:latest
+    container_name: dms_phpmyadmin
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    environment:
+      - PMA_HOST=admin_db
+      - PMA_PORT=3306
+      - MYSQL_ROOT_PASSWORD=${ROOT_PASSWORD:-root}
+    depends_on:
+      - admin_db
+volumes:
+  dbdata:

@@ -1,0 +1,546 @@
+<?php
+
+use App\Http\Controllers\v1\api\Auth\AuthController;
+/*
+|--------------------------------------------------------------------------
+| API Routes (v1)
+|--------------------------------------------------------------------------
+| Enforcement order:
+| 1. auth:sanctum        → authentication
+| 2. context.guard      → active operational context
+| 3. ability:{domain}.* → token scope ceiling
+| 4. Controller authz   → fine-grained permission checks
+|--------------------------------------------------------------------------
+*/
+
+/* =========================================================
+ | AUTH CONTROLLERS
+ ========================================================= */
+use App\Http\Controllers\v1\api\Auth\ContextSwitchController;
+use App\Http\Controllers\v1\api\Auth\PermissionController;
+use App\Http\Controllers\v1\api\Auth\RoleController;
+use App\Http\Controllers\v1\api\Auth\UserAssignmentController;
+use App\Http\Controllers\v1\api\Auth\UserContextController;
+use App\Http\Controllers\v1\api\Auth\UserController;
+/* =========================================================
+| GOVERNANCE CONTROLLERS
+========================================================= */
+use App\Http\Controllers\v1\api\Core\BranchController;
+use App\Http\Controllers\v1\api\Core\FinancialYearController;
+/* =========================================================
+| CORE CONTROLLERS
+========================================================= */
+use App\Http\Controllers\v1\api\Core\OrganizationController;
+use App\Http\Controllers\v1\api\Core\OutletController;
+use App\Http\Controllers\v1\api\Core\OutletSectionController;
+use App\Http\Controllers\v1\api\Core\SectionCategoryController;
+use App\Http\Controllers\v1\api\Core\TaxController;
+use App\Http\Controllers\v1\api\Core\WarehouseController;
+use App\Http\Controllers\v1\api\Core\WarehouseSectionController;
+/* =========================================================
+ | PARTNER CONTROLLERS
+ ========================================================= */
+use App\Http\Controllers\v1\api\Partner\CustomerController;
+use App\Http\Controllers\v1\api\Partner\PartnerCategoryController;
+use App\Http\Controllers\v1\api\Partner\SupplierController;
+/* =========================================================
+ | INVENTORY CONTROLLERS
+ ========================================================= */
+use App\Http\Controllers\v1\api\Inventory\BrandController;
+use App\Http\Controllers\v1\api\Inventory\BrandModelController;
+use App\Http\Controllers\v1\api\Inventory\CategoryController;
+// use App\Http\Controllers\v1\api\Inventory\CouponController;
+// use App\Http\Controllers\v1\api\Inventory\InventoryBalanceController;
+use App\Http\Controllers\v1\api\Inventory\InventoryBatchController;
+// use App\Http\Controllers\v1\api\Inventory\InventoryLedgerController;
+// use App\Http\Controllers\v1\api\Inventory\InventoryReservationController;
+// use App\Http\Controllers\v1\api\Inventory\PriceListController;
+// use App\Http\Controllers\v1\api\Inventory\PriceListItemController;
+// use App\Http\Controllers\v1\api\Inventory\ProductController;
+// use App\Http\Controllers\v1\api\Inventory\ProductVariantController;
+// use App\Http\Controllers\v1\api\Inventory\ProductVariantDiscountController;
+// use App\Http\Controllers\v1\api\Inventory\ProductVariantPriceController;
+// use App\Http\Controllers\v1\api\Inventory\ProductVariantUnitController;
+// use App\Http\Controllers\v1\api\Inventory\PromotionController;
+// use App\Http\Controllers\v1\api\Inventory\SerialNumberController;
+use App\Http\Controllers\v1\api\Inventory\StockLocationController;
+use App\Http\Controllers\v1\api\Inventory\UnitController;
+use App\Http\Controllers\v1\api\Inventory\VariationController;
+// use App\Http\Controllers\v1\api\Inventory\VariationValueController;
+/* =========================================================
+ | VOUCHER CONTROLLERS
+ ========================================================= */
+use App\Http\Controllers\v1\api\Voucher\CreditNoteController;
+use App\Http\Controllers\v1\api\Voucher\DebitNoteController;
+use App\Http\Controllers\v1\api\Voucher\DeliveryNoteController;
+use App\Http\Controllers\v1\api\Voucher\InvoiceController;
+use App\Http\Controllers\v1\api\Voucher\PurchaseBillController;
+use App\Http\Controllers\v1\api\Voucher\PurchaseOrderController;
+use App\Http\Controllers\v1\api\Voucher\ReceiptNoteController;
+use App\Http\Controllers\v1\api\Voucher\SaleOrderController;
+use Illuminate\Support\Facades\Route;
+
+/* =========================================================
+ | API VERSION v1
+ ========================================================= */
+Route::prefix('v1')->group(function () {
+
+    /* =====================================================
+     | PUBLIC AUTH (NO TOKEN)
+     ===================================================== */
+    Route::prefix('auth')->group(function () {
+        Route::post('register', [AuthController::class, 'register']);
+        Route::post('login', [AuthController::class, 'login'])->middleware('throttle:10,1');
+        Route::post('forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:5,1');
+        Route::post('reset-password', [AuthController::class, 'resetPassword']);
+    });
+
+    /*
+    |--------------------------------------------------------------------------
+    | AUTHORITY POLICIES (SYSTEM ONLY)
+    |--------------------------------------------------------------------------
+    | No permissions
+    | is_admin enforced in AuthorizationService
+    */
+
+    require __DIR__.'/api/policies.php';
+
+    /* =====================================================
+     | AUTHENTICATED (TOKEN REQUIRED)
+     ===================================================== */
+    Route::middleware('auth:sanctum')->group(function () {
+
+        /* =========================
+         | AUTH SESSION
+         ========================= */
+        Route::prefix('auth')->group(function () {
+            Route::post('logout', [AuthController::class, 'logout']);
+            Route::get('profile', [AuthController::class, 'profile']);
+        });
+
+        /* ===============================================
+        | RBAC (SYSTEM / GOVERNANCE) (NO CONTEXT REQUIRED)
+        ================================================= */
+        Route::prefix('rbac')->middleware('ability:rbac.*')->group(function () {
+
+            Route::apiResource('roles', RoleController::class);
+            Route::apiResource('permissions', PermissionController::class);
+            Route::put('roles/{role}/sync-permissions', [RoleController::class, 'syncPermissions']);
+        });
+
+        /* ================================================
+         | USERS (SYSTEM / ORG ADMIN) (NO CONTEXT REQUIRED)
+         ================================================== */
+        Route::middleware('ability:users.*')
+            ->group(function () {
+                Route::apiResource('users', UserController::class);
+                /* Assignment & Context management */
+                Route::apiResource('assignments', UserAssignmentController::class)->only(['index', 'show']);
+                Route::post('assignments/{assignment}/revoke', [UserAssignmentController::class, 'revokeRoleAt']);
+                Route::get('/active-assignments', [UserAssignmentController::class, 'myActiveAssignments']);
+                // View available contexts
+                Route::get('contexts', [UserContextController::class, 'index']);
+                Route::get('contexts/{context}', [UserContextController::class, 'show']);
+
+                Route::prefix('users')
+                    ->group(function () {
+                        /* Role assignment at scope */
+                        Route::post('{user}/assign-role-at', [UserAssignmentController::class, 'assignRoleAt']);
+                    });
+            });
+        /* =====================================
+         | CONTEXT SWITCH (NO CONTEXT REQUIRED)
+         ======================================= */
+        Route::get('available-contexts', [UserContextController::class, 'available']);
+        Route::post('switch-context', [ContextSwitchController::class, 'switch']);
+
+        /* =====================================================
+         | CONTEXT-BOUND APIs
+         ===================================================== */
+        Route::middleware('context.guard')->group(function () {
+            /* =========================
+             | CORE MASTER DATA
+             ========================= */
+            Route::middleware('ability:core.*')->group(function () {
+
+                Route::apiResource('organizations', OrganizationController::class);
+                Route::post('organizations/{organization}/restore', [OrganizationController::class, 'restore']);
+                Route::delete('organizations/{organization}/force-delete', [OrganizationController::class, 'forceDelete']);
+
+                Route::apiResource('branches', BranchController::class);
+                Route::post('branches/{id}/restore', [BranchController::class, 'restore']);
+                Route::delete('branches/{id}/force-delete', [BranchController::class, 'forceDelete']);
+
+                Route::apiResource('warehouses', WarehouseController::class);
+                Route::post('warehouses/{id}/restore', [WarehouseController::class, 'restore']);
+                Route::delete('warehouses/{id}/force-delete', [WarehouseController::class, 'forceDelete']);
+
+                Route::apiResource('warehouse-sections', WarehouseSectionController::class);
+                Route::post('warehouse-sections/{id}/restore', [WarehouseSectionController::class, 'restore']);
+                Route::delete('warehouse-sections/{id}/force-delete', [WarehouseSectionController::class, 'forceDelete']);
+
+                Route::apiResource('outlets', OutletController::class);
+                Route::post('outlets/{id}/restore', [OutletController::class, 'restore']);
+                Route::delete('outlets/{id}/force-delete', [OutletController::class, 'forceDelete']);
+
+                Route::apiResource('outlet-sections', OutletSectionController::class);
+                Route::post('outlet-sections/{id}/restore', [OutletSectionController::class, 'restore']);
+                Route::delete('outlet-sections/{id}/force-delete', [OutletSectionController::class, 'forceDelete']);
+
+                Route::apiResource('section-categories', SectionCategoryController::class);
+                Route::post('section-categories/{id}/restore', [SectionCategoryController::class, 'restore']);
+                Route::delete('section-categories/{id}/force-delete', [SectionCategoryController::class, 'forceDelete']);
+
+                Route::apiResource('taxes', TaxController::class);
+                Route::post('taxes/{id}/restore', [TaxController::class, 'restore']);
+                Route::delete('taxes/{id}/force-delete', [TaxController::class, 'forceDelete']);
+
+                Route::apiResource('financial-years', FinancialYearController::class);
+                Route::post('financial-years/{id}/restore', [FinancialYearController::class, 'restore']);
+                Route::delete('financial-years/{id}/force-delete', [FinancialYearController::class, 'forceDelete']);
+            });
+
+            /* =========================
+             | PARTNERS
+             ========================= */
+
+            Route::middleware(['context.guard', 'ability:partners.*'])->group(function () {
+                Route::get('customer-categories', [PartnerCategoryController::class, 'index'])->defaults('category_type', 'customer');
+                Route::get('supplier-categories', [PartnerCategoryController::class, 'index'])->defaults('category_type', 'supplier');
+                Route::apiResource('partner-categories', PartnerCategoryController::class)->except(['index']);
+                Route::apiResource('customers', CustomerController::class);
+                Route::apiResource('suppliers', SupplierController::class);
+            });
+
+            /* =========================
+             | INVENTORY
+             ========================= */
+
+            Route::middleware(['context.guard', 'ability:inventory.*'])->group(function () {
+
+                Route::apiResource('brands', BrandController::class);
+
+                Route::apiResource('brand_models', BrandModelController::class);
+                Route::delete('brand_models/{brand_model}/force', [BrandModelController::class, 'forceDelete']);
+                Route::patch('brand_models/{brand_model}/restore', [BrandModelController::class, 'restore']);
+
+                Route::apiResource('categories', CategoryController::class);
+
+                Route::apiResource('units', UnitController::class);
+
+                Route::apiResource('variations', VariationController::class);
+
+                // Route::apiResource('variation-values', VariationValueController::class);
+
+                // Route::apiResource('products', ProductController::class);
+                // Route::delete('products/{product}/force', [ProductController::class, 'forceDelete']);
+                // Route::patch('products/{product}/restore', [ProductController::class, 'restore']);
+
+                // Route::prefix('products/{product}')->group(function () {
+                //     Route::apiResource('variants', ProductVariantController::class)->except(['index']);
+                //     // variants index is handled by product-variants endpoint with product_id filter
+                //     Route::delete('variants/{product_variant}/force', [ProductVariantController::class, 'forceDelete']);
+                //     Route::patch('variants/{product_variant}/restore', [ProductVariantController::class, 'restore']);
+                // });
+
+                // Route::apiResource('product-variants', ProductVariantController::class)->only(['index']);
+
+                // Inventory Module Routes
+                Route::apiResource('stock-locations', StockLocationController::class);
+                Route::delete('stock-locations/{id}/force', [StockLocationController::class, 'forceDelete']);
+                Route::patch('stock-locations/{id}/restore', [StockLocationController::class, 'restore']);
+
+                Route::apiResource('inventory-batches', InventoryBatchController::class);
+                Route::get('inventory-batches/by-variant/{product_variant_id}', [InventoryBatchController::class, 'byVariant']);
+                Route::get('inventory-batches/expired', [InventoryBatchController::class, 'getExpired']);
+                Route::get('inventory-batches/expiring', [InventoryBatchController::class, 'getExpiring']);
+
+                // Route::apiResource('inventory-balances', InventoryBalanceController::class)->only(['index', 'show', 'update']);
+                // Route::apiResource('inventory-ledger', InventoryLedgerController::class)->only(['index', 'show']);
+
+                // Route::apiResource('inventory-reservations', InventoryReservationController::class);
+
+                // Route::apiResource('product-variant-prices', ProductVariantPriceController::class);
+                // Route::apiResource('product-variant-discounts', ProductVariantDiscountController::class);
+
+                // Route::apiResource('serial-numbers', SerialNumberController::class);
+                // Route::apiResource('product-variant-units', ProductVariantUnitController::clas// Price Lists
+
+                // Price List
+                Route::apiResource('price-lists', PriceListController::class);
+                Route::apiResource('price-lists.items', PriceListItemController::class)->shallow();
+
+                // Promotions
+                Route::apiResource('promotions', PromotionController::class);
+                Route::post('promotion-scopes', [PromotionScopeController::class, 'store']);
+                Route::delete('promotion-scopes/{id}', [PromotionScopeController::class, 'destroy']);
+                Route::post('promotion-targets', [PromotionTargetController::class, 'store']);
+                Route::delete('promotion-targets/{id}', [PromotionTargetController::class, 'destroy']);
+
+                // Coupons
+                Route::apiResource('coupons', CouponController::class);
+                Route::post('coupons/apply', [CouponController::class, 'apply']);
+                Route::post('coupon-scopes', [CouponScopeController::class, 'store']);
+                Route::delete('coupon-scopes/{id}', [CouponScopeController::class, 'destroy']);
+                Route::post('coupon-targets', [CouponTargetController::class, 'store']);
+                Route::delete('coupon-targets/{id}', [CouponTargetController::class, 'destroy']);
+                Route::post('customer-coupons', [CustomerCouponController::class, 'store']);
+
+                // Simulation & Cart
+                Route::post('pricing/simulate', [PriceSimulationController::class, 'simulate']);
+                Route::post('cart/calculate', [CartCalculationController::class, 'calculate']);s);
+
+
+            });
+
+            /* =========================
+             | VOUCHERS
+             ========================= */
+
+            Route::middleware(['context.guard',
+                'ability:vouchers.*',
+            ])->group(function () {
+
+                // Sale Order Routes
+                Route::prefix('sale-orders')->group(function () {
+                    Route::get('/', [SaleOrderController::class, 'index']);
+                    Route::post('/', [SaleOrderController::class, 'store']);
+                    Route::get('{id}', [SaleOrderController::class, 'show']);
+                    Route::put('{id}', [SaleOrderController::class, 'update']);
+                    Route::delete('{id}', [SaleOrderController::class, 'destroy']);
+                    Route::post('{id}/restore', [SaleOrderController::class, 'restore']);
+                    Route::delete('{id}/force', [SaleOrderController::class, 'forceDelete']);
+                    Route::post('{id}/review', [SaleOrderController::class, 'review']);
+                    Route::post('{id}/approve', [SaleOrderController::class, 'approve']);
+                    Route::post('{id}/allocate', [SaleOrderController::class, 'allocate']);
+                    Route::post('{id}/fulfill', [SaleOrderController::class, 'fulfill']);
+                });
+
+                // Invoice Routes
+                Route::prefix('invoices')->group(function () {
+                    Route::get('/', [InvoiceController::class, 'index']);
+
+                    Route::post('/', [InvoiceController::class, 'store']);
+
+                    Route::get('{id}', [InvoiceController::class, 'show']);
+
+                    Route::put('{id}', [InvoiceController::class, 'update']);
+                    Route::delete('{id}', [InvoiceController::class, 'destroy']);
+
+                    // Restore soft-deleted sale order
+                    Route::post('{id}/restore', [InvoiceController::class, 'restore']);
+
+                    // Permanent delete (Admin only)
+                    Route::delete('{id}/force', [InvoiceController::class, 'forceDelete']);
+
+                    // Workflow actions
+                    Route::post('{id}/review', [InvoiceController::class, 'review']);
+
+                    Route::post('{id}/approve', [InvoiceController::class, 'approve']);
+                });
+
+                // Goods Delivery Note Routes
+                Route::prefix('delivery-notes')->group(function () {
+                    Route::get('/', [DeliveryNoteController::class, 'index']);
+
+                    Route::post('/', [DeliveryNoteController::class, 'store']);
+
+                    Route::get('{id}', [DeliveryNoteController::class, 'show']);
+                    Route::put('{id}', [DeliveryNoteController::class, 'update']);
+                    Route::delete('{id}', [DeliveryNoteController::class, 'destroy']);
+
+                    // Restore soft-deleted sale order
+                    Route::post('{id}/restore', [DeliveryNoteController::class, 'restore']);
+
+                    // Permanent delete (Admin only)
+                    Route::delete('{id}/force', [DeliveryNoteController::class, 'forceDelete']);
+
+                    // Workflow actions
+                    Route::post('{id}/review', [DeliveryNoteController::class, 'review']);
+
+                    Route::post('{id}/approve', [DeliveryNoteController::class, 'approve']);
+                });
+
+                // Credit Note (Sale Return) Routes
+                Route::prefix('credit-notes')->group(function () {
+                    Route::get('/', [CreditNoteController::class, 'index']);
+
+                    Route::post('/', [CreditNoteController::class, 'store']);
+
+                    Route::get('{id}', [CreditNoteController::class, 'show']);
+
+                    Route::put('{id}', [CreditNoteController::class, 'update']);
+                    Route::delete('{id}', [CreditNoteController::class, 'destroy']);
+
+                    // Restore soft-deleted sale order
+                    Route::post('{id}/restore', [CreditNoteController::class, 'restore']);
+
+                    // Permanent delete (Admin only)
+                    Route::delete('{id}/force', [CreditNoteController::class, 'forceDelete']);
+
+                    // Workflow actions
+                    Route::post('{id}/review', [CreditNoteController::class, 'review']);
+
+                    Route::post('{id}/approve', [CreditNoteController::class, 'approve']);
+                });
+
+                // Purchase Order Routes
+                Route::prefix('purchase-orders')->group(function () {
+                    Route::get('/', [PurchaseOrderController::class, 'index']);
+                    Route::post('/', [PurchaseOrderController::class, 'store']);
+
+                    Route::get('{id}', [PurchaseOrderController::class, 'show']);
+
+                    Route::put('{id}', [PurchaseOrderController::class, 'update']);
+                    Route::delete('{id}', [PurchaseOrderController::class, 'destroy']);
+
+                    // Restore soft-deleted sale order
+                    Route::post('{id}/restore', [PurchaseOrderController::class, 'restore']);
+
+                    // Permanent delete (Admin only)
+                    Route::delete('{id}/force', [PurchaseOrderController::class, 'forceDelete']);
+
+                    // Workflow actions
+                    Route::post('{id}/review', [PurchaseOrderController::class, 'review']);
+
+                    Route::post('{id}/approve', [PurchaseOrderController::class, 'approve']);
+                });
+
+                // Purchase Bill Routes
+                Route::prefix('purchase-bills')->group(function () {
+                    Route::get('/', [PurchaseBillController::class, 'index']);
+                    Route::post('/', [PurchaseBillController::class, 'store']);
+
+                    Route::get('{id}', [PurchaseBillController::class, 'show']);
+
+                    Route::put('{id}', [PurchaseBillController::class, 'update']);
+                    Route::delete('{id}', [PurchaseBillController::class, 'destroy']);
+
+                    // Restore soft-deleted sale order
+                    Route::post('{id}/restore', [PurchaseBillController::class, 'restore']);
+
+                    // Permanent delete (Admin only)
+                    Route::delete('{id}/force', [PurchaseBillController::class, 'forceDelete']);
+
+                    // Workflow actions
+                    Route::post('{id}/review', [PurchaseBillController::class, 'review']);
+
+                    Route::post('{id}/approve', [PurchaseBillController::class, 'approve']);
+                });
+
+                // Goods Receipt Note Routes
+                Route::prefix('receipt-notes')->group(function () {
+                    Route::get('/', [ReceiptNoteController::class, 'index']);
+                    Route::post('/', [ReceiptNoteController::class, 'store']);
+
+                    Route::get('{id}', [ReceiptNoteController::class, 'show']);
+
+                    Route::put('{id}', [ReceiptNoteController::class, 'update']);
+                    Route::delete('{id}', [ReceiptNoteController::class, 'destroy']);
+
+                    // Restore soft-deleted sale order
+                    Route::post('{id}/restore', [ReceiptNoteController::class, 'restore']);
+
+                    // Permanent delete (Admin only)
+                    Route::delete('{id}/force', [ReceiptNoteController::class, 'forceDelete']);
+
+                    // Workflow actions
+                    Route::post('{id}/review', [ReceiptNoteController::class, 'review']);
+
+                    Route::post('{id}/approve', [ReceiptNoteController::class, 'approve']);
+                });
+
+                // Debit Note (Purchase return) Routes
+                Route::prefix('debit-notes')->group(function () {
+                    Route::get('/', [DebitNoteController::class, 'index']);
+                    Route::post('/', [DebitNoteController::class, 'store']);
+
+                    Route::get('{id}', [DebitNoteController::class, 'show']);
+
+                    Route::put('{id}', [DebitNoteController::class, 'update']);
+                    Route::delete('{id}', [DebitNoteController::class, 'destroy']);
+
+                    // Restore soft-deleted sale order
+                    Route::post('{id}/restore', [DebitNoteController::class, 'restore']);
+
+                    // Permanent delete (Admin only)
+                    Route::delete('{id}/force', [DebitNoteController::class, 'forceDelete']);
+
+                    // Workflow actions
+                    Route::post('{id}/review', [DebitNoteController::class, 'review']);
+
+                    Route::post('{id}/approve', [DebitNoteController::class, 'approve']);
+                });
+            });
+        });
+    });
+});
+<?php
+
+use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\v1\api\Core\OrganizationController;
+use App\Http\Controllers\v1\api\Governance\{
+    OrganizationPolicyController,
+    AuthorityPolicyController,
+    StockFlowPolicyController,
+};
+
+/*
+|--------------------------------------------------------------------------
+| GOVERNANCE POLICIES (Organization Scoped)
+|--------------------------------------------------------------------------
+*/
+Route::middleware(['auth:sanctum','system.admin'])->group(function () {
+    Route::prefix('organizations/{organization}')
+        ->scopeBindings()
+        ->group(function () {
+
+            /*
+            |--------------------------------------------------------------------------
+            | GLOBAL POLICY LOCK (Organization Level)
+            |--------------------------------------------------------------------------
+            */
+            Route::controller(OrganizationController::class)->group(function () {
+                Route::put('policies/lock', 'lockAll');
+                Route::put('policies/unlock', 'unlockAll');
+            });
+
+            /*
+            |--------------------------------------------------------------------------
+            | POLICY DOMAIN ROUTES
+            |--------------------------------------------------------------------------
+            */
+            registerPolicyRoutes('organization-policies', OrganizationPolicyController::class);
+            registerPolicyRoutes('authority-policies', AuthorityPolicyController::class);
+            registerPolicyRoutes('stock-flow-policies', StockFlowPolicyController::class);
+            // registerPolicyRoutes('stock-control-policies', StockControlPolicyController::class);
+        });
+});
+
+/*
+|--------------------------------------------------------------------------
+| Shared Policy Route Definition
+|--------------------------------------------------------------------------
+*/
+function registerPolicyRoutes(string $prefix, string $controller): void
+{
+    Route::prefix($prefix)
+        ->controller($controller)
+        ->group(function () {
+
+            // CRUD
+            Route::get('/', 'index');
+            Route::post('/', 'store');
+            Route::get('{policy}', 'show');
+            Route::put('{policy}', 'update');
+            Route::delete('{policy}', 'destroy');
+
+            // Locking
+            Route::put('{policy}/lock', 'lock');
+            Route::put('{policy}/unlock', 'unlock');
+
+            // Soft Delete Handling
+            Route::put('{policy}/restore', 'restore');
+            Route::delete('{policy}/force', 'forceDelete');
+        });
+}

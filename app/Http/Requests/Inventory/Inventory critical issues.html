@@ -1,0 +1,42 @@
+🔴 A) Base Unit Validation Enforcement
+
+We must enforce:
+
+Each product variant must have exactly ONE base unit
+
+Otherwise inventory math will break.
+
+We should add validation in Store/UpdateProductRequest.
+
+🔴 B) Variant Cannot Be Deleted If Stock Exists
+
+Before enabling variant deletion inside update sync,
+we must check:
+
+inventory_balances exists for variant
+
+
+If yes → block deletion.
+
+This will be added when we integrate Inventory Engine.
+
+🔴 C) Policy for Stock Location Hierarchy
+
+Your migration uses:
+
+$morphs('locatable');
+
+
+Which means:
+
+StockLocation can belong to:
+
+Organization
+
+Branch
+
+Warehouse
+
+Store
+
+Department
