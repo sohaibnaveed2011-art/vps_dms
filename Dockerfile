@@ -1,6 +1,6 @@
 FROM php:8.3-fpm
 
-# 1. Install system dependencies + Node.js (for Vite/Laravel 12)
+# 1. Install system dependencies + Node.js
 RUN apt-get update && apt-get install -y \
     git unzip libzip-dev libpng-dev libonig-dev libicu-dev \
     curl gnupg \
@@ -17,11 +17,14 @@ WORKDIR /app
 
 # 3. Copy files and install dependencies
 COPY . .
-RUN composer install --no-interaction --no-scripts --prefer-dist
+RUN composer install --no-interaction --no-scripts --prefer-dist \
+    && npm install \
+    && npm run build
 
 # 4. Permissions
-RUN chown -R www-data:www-data /app/storage /app/bootstrap/cache
+RUN chown -R www-data:www-data /app/storage /app/bootstrap/cache \
+    && chmod -R 775 /app/storage /app/bootstrap/cache
 
-# 5. Laravel 12+ Development Command
-# We use 'php artisan serve' for local dev, or 'php-fpm' for production
+# 5. Production Command
+# Note: We bind to 0.0.0.0 so Docker can map the internal port to your external port
 CMD ["php", "artisan", "serve", "--host=0.0.0.0", "--port=8000"]
