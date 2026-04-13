@@ -13,5 +13,6 @@ jobs:
         uses: docker build . -t sohaib2naveed/vps_dms:v1
       - name: Pull image to docker hub
         run: [
+          docker login -u sohaib2naveed -p ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }},
           docker push sohaib2naveed/vps_dms:v1
         ]
