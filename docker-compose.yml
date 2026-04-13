@@ -2,7 +2,7 @@ services:
   # --- REDIS SERVICE ---
   redis:
     image: redis:alpine
-    container_name: redis_cache
+    container_name: redis
     restart: unless-stopped
     volumes:
       - redis_data:/data
@@ -37,8 +37,7 @@ services:
       - APP_ENV=production
       - APP_DEBUG=false
       - APP_URL=http://72.60.28.176:9010
-      - REDIS_HOST=redis_cache
-      - REDIS_HOST=redis_cache  # This matches the service name above
+      - REDIS_HOST=redis  # This matches the service name above
       - REDIS_PORT=6379
       - DB_CONNECTION=mysql
       - DB_HOST=${DB_CONTAINER:-epos-db-rest2}
@@ -64,7 +63,7 @@ services:
       - DB_DATABASE=${DB_NAME:-dms}
       - DB_USERNAME=${DB_USER:-eposuser}
       - DB_PASSWORD=${DB_PASS:-epospass}
-      - REDIS_HOST=redis_cache
+      - REDIS_HOST=redis
     depends_on:
       - admin_db
     networks:
