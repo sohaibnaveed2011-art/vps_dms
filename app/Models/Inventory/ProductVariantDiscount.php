@@ -17,6 +17,9 @@ class ProductVariantDiscount extends Model
         'discountable_type',
         'discountable_id',
         'type',
+        'priority',
+        'stackable',
+        'max_discount_amount',
         'value',
         'start_date',
         'end_date',
@@ -28,6 +31,8 @@ class ProductVariantDiscount extends Model
         'end_date'   => 'date',
         'is_active'  => 'boolean',
         'value'      => 'decimal:6',
+        'priority'   => 'integer',
+        'stackable'  => 'boolean',
     ];
 
     /**

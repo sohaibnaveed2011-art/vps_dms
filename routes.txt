@@ -1,0 +1,300 @@
+
+  GET|HEAD        / .................................................................................................................................. 
+  GET|HEAD        api/v1/active-assignments ................................................. v1\api\Auth\UserAssignmentController@myActiveAssignments
+  GET|HEAD        api/v1/assignments .................................................. assignments.index › v1\api\Auth\UserAssignmentController@index
+  GET|HEAD        api/v1/assignments/{assignment} ....................................... assignments.show › v1\api\Auth\UserAssignmentController@show
+  POST            api/v1/assignments/{assignment}/revoke ........................................... v1\api\Auth\UserAssignmentController@revokeRoleAt
+  POST            api/v1/auth/forgot-password .............................................................. v1\api\Auth\AuthController@forgotPassword
+  POST            api/v1/auth/login ................................................................................. v1\api\Auth\AuthController@login
+  POST            api/v1/auth/logout ............................................................................... v1\api\Auth\AuthController@logout
+  GET|HEAD        api/v1/auth/profile ............................................................................. v1\api\Auth\AuthController@profile
+  POST            api/v1/auth/reset-password ................................................................ v1\api\Auth\AuthController@resetPassword
+  GET|HEAD        api/v1/available-contexts .............................................................. v1\api\Auth\UserContextController@available
+  GET|HEAD        api/v1/branches ................................................................ branches.index › v1\api\Core\BranchController@index
+  POST            api/v1/branches ................................................................ branches.store › v1\api\Core\BranchController@store
+  GET|HEAD        api/v1/branches/{branch} ......................................................... branches.show › v1\api\Core\BranchController@show
+  PUT|PATCH       api/v1/branches/{branch} ..................................................... branches.update › v1\api\Core\BranchController@update
+  DELETE          api/v1/branches/{branch} ................................................... branches.destroy › v1\api\Core\BranchController@destroy
+  DELETE          api/v1/branches/{id}/force-delete ......................................................... v1\api\Core\BranchController@forceDelete
+  POST            api/v1/branches/{id}/restore .................................................................. v1\api\Core\BranchController@restore
+  GET|HEAD        api/v1/brands ................................................................ brands.index › v1\api\Inventory\BrandController@index
+  POST            api/v1/brands ................................................................ brands.store › v1\api\Inventory\BrandController@store
+  GET|HEAD        api/v1/brands/{brand} .......................................................... brands.show › v1\api\Inventory\BrandController@show
+  PUT|PATCH       api/v1/brands/{brand} ...................................................... brands.update › v1\api\Inventory\BrandController@update
+  DELETE          api/v1/brands/{brand} .................................................... brands.destroy › v1\api\Inventory\BrandController@destroy
+  GET|HEAD        api/v1/brands/{brand}/models ..................................... brands.models.index › v1\api\Inventory\BrandModelController@index
+  POST            api/v1/brands/{brand}/models ..................................... brands.models.store › v1\api\Inventory\BrandModelController@store
+  GET|HEAD        api/v1/brands/{brand}/models/{brand_model} ......................... brands.models.show › v1\api\Inventory\BrandModelController@show
+  PUT|PATCH       api/v1/brands/{brand}/models/{brand_model} ..................... brands.models.update › v1\api\Inventory\BrandModelController@update
+  DELETE          api/v1/brands/{brand}/models/{brand_model} ................... brands.models.destroy › v1\api\Inventory\BrandModelController@destroy
+  DELETE          api/v1/brands/{brand}/models/{brand_model}/force ................................. v1\api\Inventory\BrandModelController@forceDelete
+  PATCH           api/v1/brands/{brand}/models/{brand_model}/restore ................................... v1\api\Inventory\BrandModelController@restore
+  GET|HEAD        api/v1/categories ..................................................... categories.index › v1\api\Inventory\CategoryController@index
+  POST            api/v1/categories ..................................................... categories.store › v1\api\Inventory\CategoryController@store
+  GET|HEAD        api/v1/categories/{category} ............................................ categories.show › v1\api\Inventory\CategoryController@show
+  PUT|PATCH       api/v1/categories/{category} ........................................ categories.update › v1\api\Inventory\CategoryController@update
+  DELETE          api/v1/categories/{category} ...................................... categories.destroy › v1\api\Inventory\CategoryController@destroy
+  GET|HEAD        api/v1/contexts ............................................................................ v1\api\Auth\UserContextController@index
+  GET|HEAD        api/v1/contexts/{context} ................................................................... v1\api\Auth\UserContextController@show
+  GET|HEAD        api/v1/credit-notes ...................................................................... v1\api\Voucher\CreditNoteController@index
+  POST            api/v1/credit-notes ...................................................................... v1\api\Voucher\CreditNoteController@store
+  GET|HEAD        api/v1/credit-notes/{id} .................................................................. v1\api\Voucher\CreditNoteController@show
+  PUT             api/v1/credit-notes/{id} ................................................................ v1\api\Voucher\CreditNoteController@update
+  DELETE          api/v1/credit-notes/{id} ............................................................... v1\api\Voucher\CreditNoteController@destroy
+  POST            api/v1/credit-notes/{id}/approve ....................................................... v1\api\Voucher\CreditNoteController@approve
+  DELETE          api/v1/credit-notes/{id}/force ..................................................... v1\api\Voucher\CreditNoteController@forceDelete
+  POST            api/v1/credit-notes/{id}/restore ....................................................... v1\api\Voucher\CreditNoteController@restore
+  POST            api/v1/credit-notes/{id}/review ......................................................... v1\api\Voucher\CreditNoteController@review
+  GET|HEAD        api/v1/customer_categories .......................................................... v1\api\Partner\PartnerCategoryController@index
+  GET|HEAD        api/v1/customers ......................................................... customers.index › v1\api\Partner\CustomerController@index
+  POST            api/v1/customers ......................................................... customers.store › v1\api\Partner\CustomerController@store
+  GET|HEAD        api/v1/customers/{customer} ................................................ customers.show › v1\api\Partner\CustomerController@show
+  PUT|PATCH       api/v1/customers/{customer} ............................................ customers.update › v1\api\Partner\CustomerController@update
+  DELETE          api/v1/customers/{customer} .......................................... customers.destroy › v1\api\Partner\CustomerController@destroy
+  GET|HEAD        api/v1/debit-notes ........................................................................ v1\api\Voucher\DebitNoteController@index
+  POST            api/v1/debit-notes ........................................................................ v1\api\Voucher\DebitNoteController@store
+  GET|HEAD        api/v1/debit-notes/{id} .................................................................... v1\api\Voucher\DebitNoteController@show
+  PUT             api/v1/debit-notes/{id} .................................................................. v1\api\Voucher\DebitNoteController@update
+  DELETE          api/v1/debit-notes/{id} ................................................................. v1\api\Voucher\DebitNoteController@destroy
+  POST            api/v1/debit-notes/{id}/approve ......................................................... v1\api\Voucher\DebitNoteController@approve
+  DELETE          api/v1/debit-notes/{id}/force ....................................................... v1\api\Voucher\DebitNoteController@forceDelete
+  POST            api/v1/debit-notes/{id}/restore ......................................................... v1\api\Voucher\DebitNoteController@restore
+  POST            api/v1/debit-notes/{id}/review ........................................................... v1\api\Voucher\DebitNoteController@review
+  GET|HEAD        api/v1/delivery-notes .................................................................. v1\api\Voucher\DeliveryNoteController@index
+  POST            api/v1/delivery-notes .................................................................. v1\api\Voucher\DeliveryNoteController@store
+  GET|HEAD        api/v1/delivery-notes/{id} .............................................................. v1\api\Voucher\DeliveryNoteController@show
+  PUT             api/v1/delivery-notes/{id} ............................................................ v1\api\Voucher\DeliveryNoteController@update
+  DELETE          api/v1/delivery-notes/{id} ........................................................... v1\api\Voucher\DeliveryNoteController@destroy
+  POST            api/v1/delivery-notes/{id}/approve ................................................... v1\api\Voucher\DeliveryNoteController@approve
+  DELETE          api/v1/delivery-notes/{id}/force ................................................. v1\api\Voucher\DeliveryNoteController@forceDelete
+  POST            api/v1/delivery-notes/{id}/restore ................................................... v1\api\Voucher\DeliveryNoteController@restore
+  POST            api/v1/delivery-notes/{id}/review ..................................................... v1\api\Voucher\DeliveryNoteController@review
+  GET|HEAD        api/v1/financial_years ........................................... financial_years.index › v1\api\Core\FinancialYearController@index
+  POST            api/v1/financial_years ........................................... financial_years.store › v1\api\Core\FinancialYearController@store
+  GET|HEAD        api/v1/financial_years/{financial_year} ............................ financial_years.show › v1\api\Core\FinancialYearController@show
+  PUT|PATCH       api/v1/financial_years/{financial_year} ........................ financial_years.update › v1\api\Core\FinancialYearController@update
+  DELETE          api/v1/financial_years/{financial_year} ...................... financial_years.destroy › v1\api\Core\FinancialYearController@destroy
+  DELETE          api/v1/financial_years/{id}/force-delete ........................................... v1\api\Core\FinancialYearController@forceDelete
+  POST            api/v1/financial_years/{id}/restore .................................................... v1\api\Core\FinancialYearController@restore
+  DELETE          api/v1/images/images/{imageId} ..................................................... v1\api\Inventory\ProductImageController@destroy
+  DELETE          api/v1/images/images/{imageId}/force-delete .................................... v1\api\Inventory\ProductImageController@forceDelete
+  POST            api/v1/images/images/{imageId}/restore ............................................. v1\api\Inventory\ProductImageController@restore
+  PUT             api/v1/images/images/{imageId}/set-primary .......................................... v1\api\Inventory\ProductImageController@update
+  GET|HEAD        api/v1/inventory-batches ................................. inventory-batches.index › v1\api\Inventory\InventoryBatchController@index
+  POST            api/v1/inventory-batches ................................. inventory-batches.store › v1\api\Inventory\InventoryBatchController@store
+  GET|HEAD        api/v1/inventory-batches/by-variant/{product_variant_id} ....................... v1\api\Inventory\InventoryBatchController@byVariant
+  GET|HEAD        api/v1/inventory-batches/expired .............................................. v1\api\Inventory\InventoryBatchController@getExpired
+  GET|HEAD        api/v1/inventory-batches/expiring ............................................ v1\api\Inventory\InventoryBatchController@getExpiring
+  GET|HEAD        api/v1/inventory-batches/{inventory_batch} ................. inventory-batches.show › v1\api\Inventory\InventoryBatchController@show
+  PUT|PATCH       api/v1/inventory-batches/{inventory_batch} ............. inventory-batches.update › v1\api\Inventory\InventoryBatchController@update
+  DELETE          api/v1/inventory-batches/{inventory_batch} ........... inventory-batches.destroy › v1\api\Inventory\InventoryBatchController@destroy
+  GET|HEAD        api/v1/invoices ............................................................................. v1\api\Voucher\InvoiceController@index
+  POST            api/v1/invoices ............................................................................. v1\api\Voucher\InvoiceController@store
+  GET|HEAD        api/v1/invoices/{id} ......................................................................... v1\api\Voucher\InvoiceController@show
+  PUT             api/v1/invoices/{id} ....................................................................... v1\api\Voucher\InvoiceController@update
+  DELETE          api/v1/invoices/{id} ...................................................................... v1\api\Voucher\InvoiceController@destroy
+  POST            api/v1/invoices/{id}/approve .............................................................. v1\api\Voucher\InvoiceController@approve
+  DELETE          api/v1/invoices/{id}/force ............................................................ v1\api\Voucher\InvoiceController@forceDelete
+  POST            api/v1/invoices/{id}/restore .............................................................. v1\api\Voucher\InvoiceController@restore
+  POST            api/v1/invoices/{id}/review ................................................................ v1\api\Voucher\InvoiceController@review
+  GET|HEAD        api/v1/items/{item} ..................................................... items.show › v1\api\Inventory\PriceListItemController@show
+  PUT|PATCH       api/v1/items/{item} ................................................. items.update › v1\api\Inventory\PriceListItemController@update
+  DELETE          api/v1/items/{item} ............................................... items.destroy › v1\api\Inventory\PriceListItemController@destroy
+  POST            api/v1/organizations ...................................................................... v1\api\Core\OrganizationController@store
+  GET|HEAD        api/v1/organizations ................................................ organizations.index › v1\api\Core\OrganizationController@index
+  GET|HEAD        api/v1/organizations/{organization} ................................... organizations.show › v1\api\Core\OrganizationController@show
+  PUT|PATCH       api/v1/organizations/{organization} ............................... organizations.update › v1\api\Core\OrganizationController@update
+  DELETE          api/v1/organizations/{organization} ............................. organizations.destroy › v1\api\Core\OrganizationController@destroy
+  GET|HEAD        api/v1/organizations/{organization}/authority-policies ........................... v1\api\Governance\AuthorityPolicyController@index
+  POST            api/v1/organizations/{organization}/authority-policies ........................... v1\api\Governance\AuthorityPolicyController@store
+  GET|HEAD        api/v1/organizations/{organization}/authority-policies/{policy} ................... v1\api\Governance\AuthorityPolicyController@show
+  PUT             api/v1/organizations/{organization}/authority-policies/{policy} ................. v1\api\Governance\AuthorityPolicyController@update
+  DELETE          api/v1/organizations/{organization}/authority-policies/{policy} ................ v1\api\Governance\AuthorityPolicyController@destroy
+  DELETE          api/v1/organizations/{organization}/authority-policies/{policy}/force ...... v1\api\Governance\AuthorityPolicyController@forceDelete
+  PUT             api/v1/organizations/{organization}/authority-policies/{policy}/lock .............. v1\api\Governance\AuthorityPolicyController@lock
+  PUT             api/v1/organizations/{organization}/authority-policies/{policy}/restore ........ v1\api\Governance\AuthorityPolicyController@restore
+  PUT             api/v1/organizations/{organization}/authority-policies/{policy}/unlock .......... v1\api\Governance\AuthorityPolicyController@unlock
+  DELETE          api/v1/organizations/{organization}/force-delete .................................... v1\api\Core\OrganizationController@forceDelete
+  GET|HEAD        api/v1/organizations/{organization}/organization-policies ..................... v1\api\Governance\OrganizationPolicyController@index
+  POST            api/v1/organizations/{organization}/organization-policies ..................... v1\api\Governance\OrganizationPolicyController@store
+  GET|HEAD        api/v1/organizations/{organization}/organization-policies/{policy} ............. v1\api\Governance\OrganizationPolicyController@show
+  PUT             api/v1/organizations/{organization}/organization-policies/{policy} ........... v1\api\Governance\OrganizationPolicyController@update
+  DELETE          api/v1/organizations/{organization}/organization-policies/{policy} .......... v1\api\Governance\OrganizationPolicyController@destroy
+  DELETE          api/v1/organizations/{organization}/organization-policies/{policy}/force v1\api\Governance\OrganizationPolicyController@forceDelete
+  PUT             api/v1/organizations/{organization}/organization-policies/{policy}/lock ........ v1\api\Governance\OrganizationPolicyController@lock
+  PUT             api/v1/organizations/{organization}/organization-policies/{policy}/restore .. v1\api\Governance\OrganizationPolicyController@restore
+  PUT             api/v1/organizations/{organization}/organization-policies/{policy}/unlock .... v1\api\Governance\OrganizationPolicyController@unlock
+  PUT             api/v1/organizations/{organization}/policies/lock ....................................... v1\api\Core\OrganizationController@lockAll
+  PUT             api/v1/organizations/{organization}/policies/unlock ................................... v1\api\Core\OrganizationController@unlockAll
+  POST            api/v1/organizations/{organization}/restore ............................................. v1\api\Core\OrganizationController@restore
+  GET|HEAD        api/v1/organizations/{organization}/stock-flow-policies .......................... v1\api\Governance\StockFlowPolicyController@index
+  POST            api/v1/organizations/{organization}/stock-flow-policies .......................... v1\api\Governance\StockFlowPolicyController@store
+  GET|HEAD        api/v1/organizations/{organization}/stock-flow-policies/{policy} .................. v1\api\Governance\StockFlowPolicyController@show
+  PUT             api/v1/organizations/{organization}/stock-flow-policies/{policy} ................ v1\api\Governance\StockFlowPolicyController@update
+  DELETE          api/v1/organizations/{organization}/stock-flow-policies/{policy} ............... v1\api\Governance\StockFlowPolicyController@destroy
+  DELETE          api/v1/organizations/{organization}/stock-flow-policies/{policy}/force ..... v1\api\Governance\StockFlowPolicyController@forceDelete
+  PUT             api/v1/organizations/{organization}/stock-flow-policies/{policy}/lock ............. v1\api\Governance\StockFlowPolicyController@lock
+  PUT             api/v1/organizations/{organization}/stock-flow-policies/{policy}/restore ....... v1\api\Governance\StockFlowPolicyController@restore
+  PUT             api/v1/organizations/{organization}/stock-flow-policies/{policy}/unlock ......... v1\api\Governance\StockFlowPolicyController@unlock
+  GET|HEAD        api/v1/outlet-sections ........................................... outlet-sections.index › v1\api\Core\OutletSectionController@index
+  POST            api/v1/outlet-sections ........................................... outlet-sections.store › v1\api\Core\OutletSectionController@store
+  DELETE          api/v1/outlet-sections/{id}/force-delete ........................................... v1\api\Core\OutletSectionController@forceDelete
+  POST            api/v1/outlet-sections/{id}/restore .................................................... v1\api\Core\OutletSectionController@restore
+  GET|HEAD        api/v1/outlet-sections/{outlet_section} ............................ outlet-sections.show › v1\api\Core\OutletSectionController@show
+  PUT|PATCH       api/v1/outlet-sections/{outlet_section} ........................ outlet-sections.update › v1\api\Core\OutletSectionController@update
+  DELETE          api/v1/outlet-sections/{outlet_section} ...................... outlet-sections.destroy › v1\api\Core\OutletSectionController@destroy
+  GET|HEAD        api/v1/outlets .................................................................. outlets.index › v1\api\Core\OutletController@index
+  POST            api/v1/outlets .................................................................. outlets.store › v1\api\Core\OutletController@store
+  DELETE          api/v1/outlets/{id}/force-delete .......................................................... v1\api\Core\OutletController@forceDelete
+  POST            api/v1/outlets/{id}/restore ................................................................... v1\api\Core\OutletController@restore
+  GET|HEAD        api/v1/outlets/{outlet} ........................................................... outlets.show › v1\api\Core\OutletController@show
+  PUT|PATCH       api/v1/outlets/{outlet} ....................................................... outlets.update › v1\api\Core\OutletController@update
+  DELETE          api/v1/outlets/{outlet} ..................................................... outlets.destroy › v1\api\Core\OutletController@destroy
+  POST            api/v1/partner_categories ................................ partner_categories.store › v1\api\Partner\PartnerCategoryController@store
+  GET|HEAD        api/v1/partner_categories/{partner_category} ............... partner_categories.show › v1\api\Partner\PartnerCategoryController@show
+  PUT|PATCH       api/v1/partner_categories/{partner_category} ........... partner_categories.update › v1\api\Partner\PartnerCategoryController@update
+  DELETE          api/v1/partner_categories/{partner_category} ......... partner_categories.destroy › v1\api\Partner\PartnerCategoryController@destroy
+  GET|HEAD        api/v1/price_lists .................................................. price_lists.index › v1\api\Inventory\PriceListController@index
+  POST            api/v1/price_lists .................................................. price_lists.store › v1\api\Inventory\PriceListController@store
+  GET|HEAD        api/v1/price_lists/{price_list} ....................................... price_lists.show › v1\api\Inventory\PriceListController@show
+  PUT|PATCH       api/v1/price_lists/{price_list} ................................... price_lists.update › v1\api\Inventory\PriceListController@update
+  DELETE          api/v1/price_lists/{price_list} ................................. price_lists.destroy › v1\api\Inventory\PriceListController@destroy
+  GET|HEAD        api/v1/price_lists/{price_list}/items ..................... price_lists.items.index › v1\api\Inventory\PriceListItemController@index
+  POST            api/v1/price_lists/{price_list}/items ..................... price_lists.items.store › v1\api\Inventory\PriceListItemController@store
+  POST            api/v1/product-variant-prices ................................................. v1\api\Inventory\ProductVariantPriceController@store
+  POST            api/v1/product-variant-prices/bulk ............................................. v1\api\Inventory\ProductVariantPriceController@bulk
+  GET|HEAD        api/v1/product-variant-prices/{id} ............................................. v1\api\Inventory\ProductVariantPriceController@show
+  PUT             api/v1/product-variant-prices/{id} ........................................... v1\api\Inventory\ProductVariantPriceController@update
+  DELETE          api/v1/product-variant-prices/{id} .......................................... v1\api\Inventory\ProductVariantPriceController@destroy
+  DELETE          api/v1/product-variant-prices/{id}/force ................................ v1\api\Inventory\ProductVariantPriceController@forceDelete
+  POST            api/v1/product-variant-prices/{id}/restore .................................. v1\api\Inventory\ProductVariantPriceController@restore
+  GET|HEAD        api/v1/products .......................................................... products.index › v1\api\Inventory\ProductController@index
+  POST            api/v1/products .......................................................... products.store › v1\api\Inventory\ProductController@store
+  GET|HEAD        api/v1/products/{product} .................................................. products.show › v1\api\Inventory\ProductController@show
+  PUT|PATCH       api/v1/products/{product} .............................................. products.update › v1\api\Inventory\ProductController@update
+  DELETE          api/v1/products/{product} ............................................ products.destroy › v1\api\Inventory\ProductController@destroy
+  DELETE          api/v1/products/{product}/force ..................................................... v1\api\Inventory\ProductController@forceDelete
+  PATCH           api/v1/products/{product}/restore ....................................................... v1\api\Inventory\ProductController@restore
+  GET|HEAD        api/v1/purchase-bills .................................................................. v1\api\Voucher\PurchaseBillController@index
+  POST            api/v1/purchase-bills .................................................................. v1\api\Voucher\PurchaseBillController@store
+  GET|HEAD        api/v1/purchase-bills/{id} .............................................................. v1\api\Voucher\PurchaseBillController@show
+  PUT             api/v1/purchase-bills/{id} ............................................................ v1\api\Voucher\PurchaseBillController@update
+  DELETE          api/v1/purchase-bills/{id} ........................................................... v1\api\Voucher\PurchaseBillController@destroy
+  POST            api/v1/purchase-bills/{id}/approve ................................................... v1\api\Voucher\PurchaseBillController@approve
+  DELETE          api/v1/purchase-bills/{id}/force ................................................. v1\api\Voucher\PurchaseBillController@forceDelete
+  POST            api/v1/purchase-bills/{id}/restore ................................................... v1\api\Voucher\PurchaseBillController@restore
+  POST            api/v1/purchase-bills/{id}/review ..................................................... v1\api\Voucher\PurchaseBillController@review
+  GET|HEAD        api/v1/purchase-orders ................................................................ v1\api\Voucher\PurchaseOrderController@index
+  POST            api/v1/purchase-orders ................................................................ v1\api\Voucher\PurchaseOrderController@store
+  GET|HEAD        api/v1/purchase-orders/{id} ............................................................ v1\api\Voucher\PurchaseOrderController@show
+  PUT             api/v1/purchase-orders/{id} .......................................................... v1\api\Voucher\PurchaseOrderController@update
+  DELETE          api/v1/purchase-orders/{id} ......................................................... v1\api\Voucher\PurchaseOrderController@destroy
+  POST            api/v1/purchase-orders/{id}/approve ................................................. v1\api\Voucher\PurchaseOrderController@approve
+  DELETE          api/v1/purchase-orders/{id}/force ............................................... v1\api\Voucher\PurchaseOrderController@forceDelete
+  POST            api/v1/purchase-orders/{id}/restore ................................................. v1\api\Voucher\PurchaseOrderController@restore
+  POST            api/v1/purchase-orders/{id}/review ................................................... v1\api\Voucher\PurchaseOrderController@review
+  GET|HEAD        api/v1/rbac/permissions ................................................. permissions.index › v1\api\Auth\PermissionController@index
+  POST            api/v1/rbac/permissions ................................................. permissions.store › v1\api\Auth\PermissionController@store
+  GET|HEAD        api/v1/rbac/permissions/{permission} ...................................... permissions.show › v1\api\Auth\PermissionController@show
+  PUT|PATCH       api/v1/rbac/permissions/{permission} .................................. permissions.update › v1\api\Auth\PermissionController@update
+  DELETE          api/v1/rbac/permissions/{permission} ................................ permissions.destroy › v1\api\Auth\PermissionController@destroy
+  GET|HEAD        api/v1/rbac/roles ................................................................... roles.index › v1\api\Auth\RoleController@index
+  POST            api/v1/rbac/roles ................................................................... roles.store › v1\api\Auth\RoleController@store
+  GET|HEAD        api/v1/rbac/roles/{role} .............................................................. roles.show › v1\api\Auth\RoleController@show
+  PUT|PATCH       api/v1/rbac/roles/{role} .......................................................... roles.update › v1\api\Auth\RoleController@update
+  DELETE          api/v1/rbac/roles/{role} ........................................................ roles.destroy › v1\api\Auth\RoleController@destroy
+  PUT             api/v1/rbac/roles/{role}/sync-permissions ............................................... v1\api\Auth\RoleController@syncPermissions
+  GET|HEAD        api/v1/receipt-notes .................................................................... v1\api\Voucher\ReceiptNoteController@index
+  POST            api/v1/receipt-notes .................................................................... v1\api\Voucher\ReceiptNoteController@store
+  GET|HEAD        api/v1/receipt-notes/{id} ................................................................ v1\api\Voucher\ReceiptNoteController@show
+  PUT             api/v1/receipt-notes/{id} .............................................................. v1\api\Voucher\ReceiptNoteController@update
+  DELETE          api/v1/receipt-notes/{id} ............................................................. v1\api\Voucher\ReceiptNoteController@destroy
+  POST            api/v1/receipt-notes/{id}/approve ..................................................... v1\api\Voucher\ReceiptNoteController@approve
+  DELETE          api/v1/receipt-notes/{id}/force ................................................... v1\api\Voucher\ReceiptNoteController@forceDelete
+  POST            api/v1/receipt-notes/{id}/restore ..................................................... v1\api\Voucher\ReceiptNoteController@restore
+  POST            api/v1/receipt-notes/{id}/review ....................................................... v1\api\Voucher\ReceiptNoteController@review
+  GET|HEAD        api/v1/sale-orders ........................................................................ v1\api\Voucher\SaleOrderController@index
+  POST            api/v1/sale-orders ........................................................................ v1\api\Voucher\SaleOrderController@store
+  GET|HEAD        api/v1/sale-orders/{id} .................................................................... v1\api\Voucher\SaleOrderController@show
+  PUT             api/v1/sale-orders/{id} .................................................................. v1\api\Voucher\SaleOrderController@update
+  DELETE          api/v1/sale-orders/{id} ................................................................. v1\api\Voucher\SaleOrderController@destroy
+  POST            api/v1/sale-orders/{id}/allocate ....................................................... v1\api\Voucher\SaleOrderController@allocate
+  POST            api/v1/sale-orders/{id}/approve ......................................................... v1\api\Voucher\SaleOrderController@approve
+  DELETE          api/v1/sale-orders/{id}/force ....................................................... v1\api\Voucher\SaleOrderController@forceDelete
+  POST            api/v1/sale-orders/{id}/fulfill ......................................................... v1\api\Voucher\SaleOrderController@fulfill
+  POST            api/v1/sale-orders/{id}/restore ......................................................... v1\api\Voucher\SaleOrderController@restore
+  POST            api/v1/sale-orders/{id}/review ........................................................... v1\api\Voucher\SaleOrderController@review
+  GET|HEAD        api/v1/section-categories ................................... section-categories.index › v1\api\Core\SectionCategoryController@index
+  POST            api/v1/section-categories ................................... section-categories.store › v1\api\Core\SectionCategoryController@store
+  DELETE          api/v1/section-categories/{id}/force-delete ...................................... v1\api\Core\SectionCategoryController@forceDelete
+  POST            api/v1/section-categories/{id}/restore ............................................... v1\api\Core\SectionCategoryController@restore
+  GET|HEAD        api/v1/section-categories/{section_category} .................. section-categories.show › v1\api\Core\SectionCategoryController@show
+  PUT|PATCH       api/v1/section-categories/{section_category} .............. section-categories.update › v1\api\Core\SectionCategoryController@update
+  DELETE          api/v1/section-categories/{section_category} ............ section-categories.destroy › v1\api\Core\SectionCategoryController@destroy
+  GET|HEAD        api/v1/stock-locations ...................................... stock-locations.index › v1\api\Inventory\StockLocationController@index
+  POST            api/v1/stock-locations ...................................... stock-locations.store › v1\api\Inventory\StockLocationController@store
+  DELETE          api/v1/stock-locations/{id}/force ............................................. v1\api\Inventory\StockLocationController@forceDelete
+  PATCH           api/v1/stock-locations/{id}/restore ............................................... v1\api\Inventory\StockLocationController@restore
+  GET|HEAD        api/v1/stock-locations/{stock_location} ....................... stock-locations.show › v1\api\Inventory\StockLocationController@show
+  PUT|PATCH       api/v1/stock-locations/{stock_location} ................... stock-locations.update › v1\api\Inventory\StockLocationController@update
+  DELETE          api/v1/stock-locations/{stock_location} ................. stock-locations.destroy › v1\api\Inventory\StockLocationController@destroy
+  GET|HEAD        api/v1/supplier_categories .......................................................... v1\api\Partner\PartnerCategoryController@index
+  GET|HEAD        api/v1/suppliers ......................................................... suppliers.index › v1\api\Partner\SupplierController@index
+  POST            api/v1/suppliers ......................................................... suppliers.store › v1\api\Partner\SupplierController@store
+  GET|HEAD        api/v1/suppliers/{supplier} ................................................ suppliers.show › v1\api\Partner\SupplierController@show
+  PUT|PATCH       api/v1/suppliers/{supplier} ............................................ suppliers.update › v1\api\Partner\SupplierController@update
+  DELETE          api/v1/suppliers/{supplier} .......................................... suppliers.destroy › v1\api\Partner\SupplierController@destroy
+  POST            api/v1/switch-context ................................................................... v1\api\Auth\ContextSwitchController@switch
+  GET|HEAD        api/v1/taxes ......................................................................... taxes.index › v1\api\Core\TaxController@index
+  POST            api/v1/taxes ......................................................................... taxes.store › v1\api\Core\TaxController@store
+  DELETE          api/v1/taxes/{id}/force-delete ............................................................... v1\api\Core\TaxController@forceDelete
+  POST            api/v1/taxes/{id}/restore ........................................................................ v1\api\Core\TaxController@restore
+  GET|HEAD        api/v1/taxes/{tax} ..................................................................... taxes.show › v1\api\Core\TaxController@show
+  PUT|PATCH       api/v1/taxes/{tax} ................................................................. taxes.update › v1\api\Core\TaxController@update
+  DELETE          api/v1/taxes/{tax} ............................................................... taxes.destroy › v1\api\Core\TaxController@destroy
+  GET|HEAD        api/v1/units ................................................................... units.index › v1\api\Inventory\UnitController@index
+  POST            api/v1/units ................................................................... units.store › v1\api\Inventory\UnitController@store
+  GET|HEAD        api/v1/units/{unit} .............................................................. units.show › v1\api\Inventory\UnitController@show
+  PUT|PATCH       api/v1/units/{unit} .......................................................... units.update › v1\api\Inventory\UnitController@update
+  DELETE          api/v1/units/{unit} ........................................................ units.destroy › v1\api\Inventory\UnitController@destroy
+  GET|HEAD        api/v1/users ........................................................................ users.index › v1\api\Auth\UserController@index
+  POST            api/v1/users ........................................................................ users.store › v1\api\Auth\UserController@store
+  GET|HEAD        api/v1/users/{user} ................................................................... users.show › v1\api\Auth\UserController@show
+  PUT|PATCH       api/v1/users/{user} ............................................................... users.update › v1\api\Auth\UserController@update
+  DELETE          api/v1/users/{user} ............................................................. users.destroy › v1\api\Auth\UserController@destroy
+  POST            api/v1/users/{user}/assign-role-at ............................................... v1\api\Auth\UserAssignmentController@assignRoleAt
+  GET|HEAD        api/v1/variations .................................................... variations.index › v1\api\Inventory\VariationController@index
+  POST            api/v1/variations .................................................... variations.store › v1\api\Inventory\VariationController@store
+  GET|HEAD        api/v1/variations/{variation} .......................................... variations.show › v1\api\Inventory\VariationController@show
+  PUT|PATCH       api/v1/variations/{variation} ...................................... variations.update › v1\api\Inventory\VariationController@update
+  DELETE          api/v1/variations/{variation} .................................... variations.destroy › v1\api\Inventory\VariationController@destroy
+  GET|HEAD        api/v1/variations/{variation}/values ..................... variations.values.index › v1\api\Inventory\VariationValueController@index
+  POST            api/v1/variations/{variation}/values ..................... variations.values.store › v1\api\Inventory\VariationValueController@store
+  GET|HEAD        api/v1/variations/{variation}/values/{variation_values} .... variations.values.show › v1\api\Inventory\VariationValueController@show
+  PUT|PATCH       api/v1/variations/{variation}/values/{variation_values} variations.values.update › v1\api\Inventory\VariationValueController@update
+  DELETE          api/v1/variations/{variation}/values/{variation_values} variations.values.destroy › v1\api\Inventory\VariationValueController@destr…
+  DELETE          api/v1/variations/{variation}/values/{variation_value}/force ................. v1\api\Inventory\VariationValueController@forceDelete
+  PATCH           api/v1/variations/{variation}/values/{variation_value}/restore ................... v1\api\Inventory\VariationValueController@restore
+  GET|HEAD        api/v1/warehouse-sections .................................. warehouse-sections.index › v1\api\Core\WarehouseSectionController@index
+  POST            api/v1/warehouse-sections .................................. warehouse-sections.store › v1\api\Core\WarehouseSectionController@store
+  DELETE          api/v1/warehouse-sections/{id}/force-delete ..................................... v1\api\Core\WarehouseSectionController@forceDelete
+  POST            api/v1/warehouse-sections/{id}/restore .............................................. v1\api\Core\WarehouseSectionController@restore
+  GET|HEAD        api/v1/warehouse-sections/{warehouse_section} ................ warehouse-sections.show › v1\api\Core\WarehouseSectionController@show
+  PUT|PATCH       api/v1/warehouse-sections/{warehouse_section} ............ warehouse-sections.update › v1\api\Core\WarehouseSectionController@update
+  DELETE          api/v1/warehouse-sections/{warehouse_section} .......... warehouse-sections.destroy › v1\api\Core\WarehouseSectionController@destroy
+  GET|HEAD        api/v1/warehouses ......................................................... warehouses.index › v1\api\Core\WarehouseController@index
+  POST            api/v1/warehouses ......................................................... warehouses.store › v1\api\Core\WarehouseController@store
+  DELETE          api/v1/warehouses/{id}/force-delete .................................................... v1\api\Core\WarehouseController@forceDelete
+  POST            api/v1/warehouses/{id}/restore ............................................................. v1\api\Core\WarehouseController@restore
+  GET|HEAD        api/v1/warehouses/{warehouse} ............................................... warehouses.show › v1\api\Core\WarehouseController@show
+  PUT|PATCH       api/v1/warehouses/{warehouse} ........................................... warehouses.update › v1\api\Core\WarehouseController@update
+  DELETE          api/v1/warehouses/{warehouse} ......................................... warehouses.destroy › v1\api\Core\WarehouseController@destroy
+  POST            api/v1/{type}/{id}/images ....................................................... v1\api\Inventory\ProductImageController@storeImage
+  GET|POST|HEAD   broadcasting/auth ....................................................... Illuminate\Broadcasting › BroadcastController@authenticate
+  GET|HEAD        sanctum/csrf-cookie .............................................. sanctum.csrf-cookie › Laravel\Sanctum › CsrfCookieController@show
+  GET|HEAD        storage/{path} ....................................................................................................... storage.local
+  PUT             storage/{path} ................................................................................................ storage.local.upload
+  GET|HEAD        up ................................................................................................................................. 
+
+                                                                                                                                  Showing [296] routes
+

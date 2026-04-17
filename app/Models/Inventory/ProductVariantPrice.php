@@ -18,6 +18,13 @@ class ProductVariantPrice extends Model
         'priceable_id',
         'cost_price',
         'sale_price',
+        'is_override',
+    ];
+
+    protected $casts = [
+        'cost_price' => 'decimal:6',
+        'sale_price' => 'decimal:6',
+        'is_override' => 'boolean',
     ];
 
     /**

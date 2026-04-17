@@ -5,9 +5,11 @@ namespace App\Services\Inventory;
 use App\Exceptions\NotFoundException;
 use App\Models\Inventory\Product;
 use App\Models\Inventory\ProductVariant;
+use App\Services\Inventory\ProductImageService;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
+use Illuminate\Database\Eloquent\Model;
 
 class ProductService
 {
@@ -15,11 +17,16 @@ class ProductService
         'category', 
         'brand', 
         'tax', 
-        'variations', 
+        'images', // Load product images
+        'variations', // load product variations (e.g., Size, Color)
         'variants', // Load the variants
         'variants.units', // Load units for each variant
-        'variants.variationValues' // Load values for each variant
+        'variants.variationValues', // Load values for each variant
+        'variants.images' // Load product variant images
     ];
+
+    public function __construct(protected ProductImageService $imageService)
+    {}
 
     public function paginate(array $filters = [], int $perPage): LengthAwarePaginator
     {
@@ -62,11 +69,16 @@ class ProductService
                 $product->variations()->sync($data['variation_ids']);
             }
 
-            // 3. Handle Variants
+            // 3. Sync Product Images
+            if (!empty($data['images'])) {
+                $this->handleImageUploads($product, $data['images']);
+            }
+
+            // 4. Handle Variants
             // If has_variants is false, we ensure the first element of 'variants' 
             // is treated as the master record.
             foreach ($data['variants'] as $variantData) {
-                $this->saveVariant($product, $variantData);
+                $this->saveVariant($product, $variantData, $data['organization_id']);
             }
 
             return $product->load($this->relations);
@@ -78,32 +90,23 @@ class ProductService
         return DB::transaction(function () use ($product, $data) {
             $product->update($data);
 
+            // 1. Variations Sync (with SoftDelete logic as per your snippet)
             if (isset($data['variation_ids'])) {
-                $existingIds = $product->variations()->pluck('variation_id')->toArray();
-                $incomingIds = $data['variation_ids'];
-
-                // 1. "Delete" (SoftDelete) variations that are not in the new list
-                $product->variations()
-                    ->whereNotIn('variation_id', $incomingIds)
-                    ->each(function ($pivot) {
-                        $pivot->pivot->delete(); // This triggers SoftDelete if using custom pivot
-                    });
-
-                // 2. "Restore" or Add variations
-                foreach ($incomingIds as $id) {
-                    // use toggle or manual update to handle restoration of soft-deleted rows
-                    $product->variations()->syncWithoutDetaching([$id]);
-                }
+                $product->variations()->sync($data['variation_ids']);
             }
 
+            // 2. Product Images (Sync logic: Add new, Soft-delete missing)
+            if (isset($data['images'])) {
+                $this->syncImages($product, $data['images']);
+            }
+
+            // 3. Handle Variants
             if (isset($data['variants'])) {
                 $incomingIds = collect($data['variants'])->pluck('id')->filter()->toArray();
-
-                // Delete variants not in the update payload
                 $product->variants()->whereNotIn('id', $incomingIds)->delete();
 
                 foreach ($data['variants'] as $variantData) {
-                    $this->saveVariant($product, $variantData);
+                    $this->saveVariant($product, $variantData, $product->organization_id);
                 }
             }
 
@@ -111,11 +114,12 @@ class ProductService
         });
     }
 
-    protected function saveVariant(Product $product, array $variantData): ProductVariant
+    protected function saveVariant(Product $product, array $variantData, $organizationId): ProductVariant
     {
         $variant = $product->variants()->updateOrCreate(
             ['id' => $variantData['id'] ?? null],
             [
+                'organization_id'   => $organizationId,
                 'sku'               => $variantData['sku'],
                 'barcode'           => $variantData['barcode'] ?? null,
                 'cost_price'        => $variantData['cost_price'],
@@ -125,14 +129,16 @@ class ProductService
             ]
         );
 
-        // Sync Units: Using delete/create is okay for now, but 
-        // updateOrCreate is safer for long-term inventory history.
+                // Sync Variant Images
+        if (isset($variantData['images'])) {
+            $this->syncImages($variant, $variantData['images']);
+        }
+
+        // Units and Variation Values
         $variant->units()->delete();
         if (!empty($variantData['units'])) {
             $variant->units()->createMany($variantData['units']);
         }
-
-        // Sync Variation Values (e.g., Small, Red)
         $variant->variationValues()->sync($variantData['variation_value_ids'] ?? []);
 
         return $variant;
@@ -156,5 +162,42 @@ class ProductService
             ]);
         }
         $product->forceDelete();
+    }
+
+    /**
+     * Specialized logic to sync images:-
+     * 1. New files get uploaded.
+     * 2. Existing IDs stay as is.
+     * 3. Missing IDs get soft-deleted.
+     **/
+    protected function syncImages(Model $model, array $images)
+    {
+        $keepIds = [];
+        $newFiles = [];
+
+        foreach ($images as $image) {
+            if (is_numeric($image)) { // It's an existing Image ID
+                $keepIds[] = $image;
+            } elseif ($image instanceof \Illuminate\Http\UploadedFile) {
+                $newFiles[] = $image;
+            }
+        }
+
+        // Soft delete images not present in the payload
+        $model->images()->whereNotIn('id', $keepIds)->delete();
+
+        // Upload new images
+        foreach ($newFiles as $file) {
+            $this->imageService->upload($model, $file);
+        }
+    }
+
+    protected function handleImageUploads(Model $model, array $images)
+    {
+        foreach ($images as $image) {
+            if ($image instanceof \Illuminate\Http\UploadedFile) {
+                $this->imageService->upload($model, $image);
+            }
+        }
     }
 }

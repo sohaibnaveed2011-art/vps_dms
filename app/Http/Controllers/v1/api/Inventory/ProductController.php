@@ -6,6 +6,7 @@ use App\Http\Controllers\v1\api\BaseApiController;
 use App\Http\Requests\Inventory\StoreProductRequest;
 use App\Http\Requests\Inventory\UpdateProductRequest;
 use App\Http\Resources\Inventory\ProductResource;
+use App\Services\Inventory\ProductImageService;
 use App\Services\Inventory\ProductService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -22,7 +23,7 @@ class ProductController extends BaseApiController
         'forceDelete' => 'inventory.product.forceDelete',
     ];
 
-    public function __construct(protected ProductService $service)
+    public function __construct(protected ProductService $service, protected ProductImageService $imageService)
     {
         parent::__construct();
     }
@@ -52,15 +53,6 @@ class ProductController extends BaseApiController
         return $this->created('Product created successfully...');
     }
 
-    // public function storeImage(Request $request, $id): JsonResponse
-    // {
-    //     $product = $this->service->find($id, $this->getActiveOrgId($request));
-    //     $this->authorizeAction($request, $product);
-    //     $this->enforcePolicy($request, 'inventory');
-    //     $this->itemService->storeMedia($product, $request->file('medias'));
-
-    //     return $this->created('Product Image saved successfully...');
-    // }
     public function show(Request $request, int $id): JsonResponse
     {
         $product = $this->service->find($id, $this->getActiveOrgId($request));
@@ -86,7 +78,7 @@ class ProductController extends BaseApiController
         $product = $this->service->find($id, $orgId);
 
         $this->authorizeAction($request, $product);
-        $this->service->delete($product);
+    $this->service->delete($product);
 
         return $this->deleted('Product deleted successfully.');
     }

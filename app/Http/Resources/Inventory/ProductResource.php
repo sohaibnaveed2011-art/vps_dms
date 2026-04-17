@@ -26,9 +26,9 @@ class ProductResource extends JsonResource
             'warranty_months'   => $this->warranty_months,
             'has_variants'      => $this->has_variants,
             'is_active'         => $this->is_active,
+            'product_images'    => ProductImageResource::collection($this->whenLoaded('images') ?? []),
             'variations'        => VariationMiniResource::collection($this->whenLoaded('variations') ?? []),
             'variants'          => ProductVariantResource::collection($this->whenLoaded('variants') ?? []),
-            'variation_values'  => VariationValueMiniResource::collection($this->whenLoaded('variationValues') ?? []),
 
         ];
     }

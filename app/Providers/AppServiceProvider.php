@@ -8,6 +8,8 @@ use App\Models\Core\Outlet;
 use App\Models\Core\OutletSection;
 use App\Models\Core\Warehouse;
 use App\Models\Core\WarehouseSection;
+use App\Models\Inventory\Product;
+use App\Models\Inventory\ProductVariant;
 use App\Models\User;
 use App\Models\Voucher\CashRegister;
 use App\Observers\OrganizationObserver;
@@ -37,6 +39,8 @@ class AppServiceProvider extends ServiceProvider
         'outlet_section'    => OutletSection::class,
         'cash_register'     => CashRegister::class,
         'user'              => User::class,
+        'product'           => Product::class,
+        'variant'           => ProductVariant::class,
     ];
 
     /**

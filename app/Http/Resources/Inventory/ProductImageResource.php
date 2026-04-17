@@ -12,7 +12,7 @@ class ProductImageResource extends JsonResource
     {
         return [
             'id' => $this->id,
-            'url' => Storage::disk($this->disk)
+            'path' => Storage::disk($this->disk)
                 ->url($this->path),
             'is_primary' => $this->is_primary,
             'sort_order' => $this->sort_order,

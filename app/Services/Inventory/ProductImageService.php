@@ -2,62 +2,137 @@
 
 namespace App\Services\Inventory;
 
-use App\Models\Inventory\Product;
+use App\Exceptions\NotFoundException;
 use App\Models\Inventory\ProductImage;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
 class ProductImageService
 {
-    /* =========================================================
-     | LIST
-     ========================================================= */
-
-    public function list(Product $product)
+    public function find(int $id, $orgId = null, bool $withTrashed = false)
     {
-        return $product->images()
-            ->orderBy('sort_order')
-            ->get();
+        $query = ProductImage::query();
+
+        
+        if ($withTrashed) $query->withTrashed();
+        if ($orgId) $query->where('org_id', $orgId);
+
+        return $query->find($id) ?? throw new NotFoundException('Record not found.');
     }
 
     /* =========================================================
-     | UPLOAD
+     | UPLOAD (polymorphic + bug fix)
      ========================================================= */
 
-    public function upload(Product $product, UploadedFile $file)
+    /**
+     * Handle initial uploads for a new entity.
+     */
+    public function handleImageUploads(Model $model, array $images): void
     {
-        return DB::transaction(function () use ($product, $file) {
+        foreach ($images as $image) {
+            if ($image instanceof UploadedFile) {
+                $this->upload($model, $image);
+            }
+        }
+    }
 
-            $path = $file->store(
-                "products/{$product->organization_id}/{$product->id}",
-                'public'
-            );
+    /**
+     * Sync images for an existing entity (Add new, keep existing, soft-delete removed).
+     */
+    public function syncImages(Model $model, $images): void
+    {
+        // If key is missing from payload, do nothing to preserve current state
+        if (is_null($images)) {
+            return;
+        }
 
-            $isPrimary = !$product->images()->exists();
+        $images = is_array($images) ? $images : [$images];
+        
+        $keepIds = [];
+        $newFiles = [];
 
-            $image = $product->images()->create([
-                'path' => $path,
-                'disk' => 'public',
+        foreach ($images as $image) {
+            // If it's a numeric ID, we want to keep it
+            if (is_numeric($image) || (is_string($image) && !($image instanceof UploadedFile) && strlen($image) < 15)) {
+                $keepIds[] = $image;
+            } 
+            // If it's a new file, we upload it
+            elseif ($image instanceof UploadedFile) {
+                $newFiles[] = $image;
+            }
+        }
+
+        // 1. Soft Delete any existing image NOT in the 'keep' list
+        $model->images()->whereNotIn('id', $keepIds)->delete();
+
+        // 2. Upload brand new files
+        foreach ($newFiles as $file) {
+            $this->upload($model, $file);
+        }
+    }
+    
+    /**
+     * Upload a single image for a Product or ProductVariant.
+     *
+     * @param Model $imageable
+     * @param UploadedFile $file
+     * @return ProductImage
+     * @throws \Exception
+     */
+    public function upload(Model $imageable, UploadedFile $file): ProductImage
+    {
+        return DB::transaction(function () use ($imageable, $file) {
+            
+            // 1. Determine directory based on Model type
+            $modelType = class_basename($imageable);
+            $directory = match ($modelType) {
+                'Product'        => "products/{$imageable->id}",
+                'ProductVariant' => "variants/{$imageable->id}",
+                default          => throw new \Exception("Unsupported imageable type: {$modelType}"),
+            };
+
+            // 2. Handle File Storage
+            $path = $file->store($directory, 'public');
+
+            if (!$path) {
+                throw new \Exception("Failed to store file on disk.");
+            }
+
+            // 3. Determine Image Metadata
+            $isPrimary = !$imageable->images()->exists();
+            $nextSortOrder = ($imageable->images()->max('sort_order') ?? 0) + 1;
+
+            // 4. Create Database Record (Matching ProductImage $fillable)
+            return $imageable->images()->create([
+                'path'       => $path,
+                'disk'       => 'public',
                 'is_primary' => $isPrimary,
-                'sort_order' => $product->images()->max('sort_order') + 1,
+                'sort_order' => $nextSortOrder,
             ]);
-
-            return $image;
         });
     }
 
-    /* =========================================================
-     | SET PRIMARY
-     ========================================================= */
+    /**
+     * Optional: Handle multiple uploads
+     */
+    public function uploadMultiple(Model $imageable, array $files): array
+    {
+        $uploadedImages = [];
+        foreach ($files as $file) {
+            $uploadedImages[] = $this->upload($imageable, $file);
+        }
+        return $uploadedImages;
+    }
 
     public function setPrimary(ProductImage $image)
     {
         return DB::transaction(function () use ($image) {
+            // Step 1: Set all sibling images to NOT primary
+            $image->imageable->images()->update(['is_primary' => false]);
 
-            $image->imageable->images()
-                ->update(['is_primary' => false]);
-
+            // Step 2: Set the chosen one to primary
             $image->update(['is_primary' => true]);
 
             return $image;
@@ -65,23 +140,31 @@ class ProductImageService
     }
 
     /* =========================================================
-     | REORDER
-     ========================================================= */
-
-    public function reorder(Product $product, array $orderedIds)
+    | REORDER (polymorphic)
+    ========================================================= */
+    public function reorder(Model $imageable, array $orderedIds)
     {
-        foreach ($orderedIds as $index => $id) {
-            $product->images()
-                ->where('id', $id)
-                ->update(['sort_order' => $index + 1]);
-        }
+        dd($imageable, $orderedIds);
+        return DB::transaction(function () use ($imageable, $orderedIds) {
+            // Start a manual integer counter
+            $sortOrder = 1;
+
+            foreach ($orderedIds as $id) {
+                // Force $id to integer and increment $sortOrder manually
+                $imageable->images()
+                    ->where('id', (int)$id)
+                    ->update(['sort_order' => $sortOrder]);
+
+                $sortOrder++; // This is safe integer incrementing
+            }
+        });
     }
 
     /* =========================================================
      | DELETE (Soft)
      ========================================================= */
 
-    public function delete(ProductImage $image)
+    public function delete(ProductImage $image): void
     {
         $image->delete();
     }
@@ -90,7 +173,7 @@ class ProductImageService
      | RESTORE
      ========================================================= */
 
-    public function restore(ProductImage $image)
+    public function restore(ProductImage $image): void
     {
         $image->restore();
     }
@@ -99,7 +182,7 @@ class ProductImageService
      | FORCE DELETE
      ========================================================= */
 
-    public function forceDelete(ProductImage $image)
+    public function forceDelete(ProductImage $image): void
     {
         Storage::disk($image->disk)->delete($image->path);
 

@@ -2,9 +2,9 @@
 
 namespace App\Http\Requests\Inventory;
 
-use Illuminate\Foundation\Http\FormRequest;
+use App\Http\Requests\BaseFormRequest;
 
-class StoreProductVariantPriceRequest extends FormRequest
+class StoreProductVariantPriceRequest extends BaseFormRequest
 {
     public function authorize(): bool
     {
@@ -19,6 +19,7 @@ class StoreProductVariantPriceRequest extends FormRequest
             'priceable_id' => ['required', 'integer'],
             'cost_price' => ['nullable', 'numeric'],
             'sale_price' => ['nullable', 'numeric'],
+            'is_override' => ['boolean'],
         ];
     }
 }

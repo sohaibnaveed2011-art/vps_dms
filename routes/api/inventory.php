@@ -7,13 +7,15 @@ use App\Http\Controllers\v1\api\Inventory\BrandController;
 use App\Http\Controllers\v1\api\Inventory\BrandModelController;
 use App\Http\Controllers\v1\api\Inventory\CategoryController;
 use App\Http\Controllers\v1\api\Inventory\InventoryBatchController;
+use App\Http\Controllers\v1\api\Inventory\PriceListController;
+use App\Http\Controllers\v1\api\Inventory\PriceListItemController;
 use App\Http\Controllers\v1\api\Inventory\ProductController;
+use App\Http\Controllers\v1\api\Inventory\ProductImageController;
+use App\Http\Controllers\v1\api\Inventory\ProductVariantPriceController;
 use App\Http\Controllers\v1\api\Inventory\StockLocationController;
 use App\Http\Controllers\v1\api\Inventory\UnitController;
 use App\Http\Controllers\v1\api\Inventory\VariationController;
 use App\Http\Controllers\v1\api\Inventory\VariationValueController;
-use App\Http\Controllers\v1\api\Inventory\PriceListController;
-use App\Http\Controllers\v1\api\Inventory\PriceListItemController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware(['ability:inventory.*'])->group(function () {
@@ -43,6 +45,28 @@ Route::middleware(['ability:inventory.*'])->group(function () {
     Route::delete('products/{product}/force', [ProductController::class, 'forceDelete']);
     Route::patch('products/{product}/restore', [ProductController::class, 'restore']);
 
+    /*
+    |--------------------------------------------------------------------------
+    | Product Variant Prices
+    |--------------------------------------------------------------------------
+    */
+
+    Route::prefix('product-variant-prices')->group(function () {
+
+        // 🔹 Bulk pricing (IMPORTANT)
+        Route::post('/bulk', [ProductVariantPriceController::class, 'bulk']);
+
+        // 🔹 Standard CRUD
+        Route::post('/', [ProductVariantPriceController::class, 'store']);
+        Route::get('/{id}', [ProductVariantPriceController::class, 'show']);
+        Route::put('/{id}', [ProductVariantPriceController::class, 'update']);
+        Route::delete('/{id}', [ProductVariantPriceController::class, 'destroy']);
+
+        // 🔹 Soft delete controls
+        Route::post('/{id}/restore', [ProductVariantPriceController::class, 'restore']);
+        Route::delete('/{id}/force', [ProductVariantPriceController::class, 'forceDelete']);
+    });
+
     // Route::prefix('products/{product}')->group(function () {
     //     Route::apiResource('variants', ProductVariantUnitController::class)->except(['index']);
     //     // variants index is handled by product-variants endpoint with product_id filter
@@ -51,6 +75,19 @@ Route::middleware(['ability:inventory.*'])->group(function () {
     // });
 
     // Route::apiResource('product-variants', ProductVariantController::class)->only(['index']);
+
+    // ====================== PRODUCT | VARIANT IMAGES ======================
+    Route::post('{type}/{id}/images', [ProductImageController::class, 'store'])
+        ->where('type', 'products|product-variants');
+
+    // ====================== COMMON IMAGE OPERATIONS ======================
+    Route::prefix('images')->group(function () {
+        Route::put('{imageId}/set-primary', [ProductImageController::class, 'setPrimary']);
+        // Route::post('{imageId}/reorder', [ProductImageController::class, 'reorder']);
+        Route::delete('{imageId}', [ProductImageController::class, 'destroy']);
+        Route::post('{imageId}/restore', [ProductImageController::class, 'restore']);
+        Route::delete('{imageId}/force-delete', [ProductImageController::class, 'forceDelete']);
+    });
 
     // Inventory Module Routes
     Route::apiResource('stock-locations', StockLocationController::class);
@@ -66,9 +103,6 @@ Route::middleware(['ability:inventory.*'])->group(function () {
     // Route::apiResource('inventory-ledger', InventoryLedgerController::class)->only(['index', 'show']);
 
     // Route::apiResource('inventory-reservations', InventoryReservationController::class);
-
-    // Route::apiResource('product-variant-prices', ProductVariantPriceController::class);
-    // Route::apiResource('product-variant-discounts', ProductVariantDiscountController::class);
 
     // Route::apiResource('serial-numbers', SerialNumberController::class);
     // Route::apiResource('product-variant-units', ProductVariantUnitController::class);
@@ -96,5 +130,4 @@ Route::middleware(['ability:inventory.*'])->group(function () {
     // Simulation & Cart
     // Route::post('pricing/simulate', [PriceSimulationController::class, 'simulate']);
     // Route::post('cart/calculate', [CartCalculationController::class, 'calculate']);
-
 });

@@ -3,20 +3,22 @@
 namespace App\Http\Controllers\v1\api\Inventory;
 
 use App\Http\Controllers\v1\api\BaseApiController;
-use App\Http\Resources\Inventory\ProductImageResource;
+use App\Http\Requests\Inventory\StoreProductImageRequest;
+use App\Http\Requests\Inventory\UpdateProductImageRequest;
 use App\Models\Inventory\Product;
-use App\Models\Inventory\ProductImage;
+use App\Models\Inventory\ProductVariant;
 use App\Services\Inventory\ProductImageService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class ProductImageController extends BaseApiController
 {
     protected array $permissions = [
-        'index'       => 'inventory.product.view',
-        'store'       => 'inventory.product.update',
-        'setPrimary'  => 'inventory.product.update',
-        'destroy'     => 'inventory.product.update',
-        'restore'     => 'inventory.product.update',
+        'store'      => 'inventory.product.create',
+        'setPrimary' => 'inventory.product.update',
+        'reorder' => 'inventory.product.update',
+        'destroy'     => 'inventory.product.destroy',
+        'restore'     => 'inventory.product.restore',
         'forceDelete' => 'inventory.product.forceDelete',
     ];
 
@@ -26,92 +28,79 @@ class ProductImageController extends BaseApiController
         parent::__construct();
     }
 
-    /* =========================================================
-     | UPLOAD
-     ========================================================= */
-
-    public function store(Request $request, int $productId)
+    /**
+     * Store images for either a Product or a Variant
+     */
+    public function store(StoreProductImageRequest $request, $type, $id)
     {
         $this->authorizeAction($request);
+        $this->enforcePolicy($request, 'inventory');
+        $model = ($type === 'products') 
+            ? Product::findOrFail($id) 
+            : ProductVariant::findOrFail($id);
 
-        $request->validate([
-            'image' => ['required', 'image', 'max:5120']
-        ]);
+        $this->service->uploadMultiple($model, $request->file('images'));
 
-        $context = $this->context($request);
-
-        $product = Product::where('organization_id', $context->organization_id)
-            ->findOrFail($productId);
-
-        $image = $this->service->upload(
-            $product,
-            $request->file('image')
-        );
-
-        return $this->created(new ProductImageResource($image));
+        return $this->created('Images uploaded successfully.');
     }
-
-    /* =========================================================
-     | SET PRIMARY
-     ========================================================= */
 
     public function setPrimary(Request $request, int $imageId)
     {
         $this->authorizeAction($request);
 
-        $image = ProductImage::findOrFail($imageId);
+        $image = $this->service->find($imageId);
 
         $updated = $this->service->setPrimary($image);
 
-        return $this->success(
-            new ProductImageResource($updated)
-        );
+        return $this->success('Record updated successfully...');
     }
+
+    // public function reorder(UpdateProductImageRequest $request, int $imageId)
+    // {
+    //     $this->authorizeAction($request);
+
+    //     $image = $this->service->find($imageId);
+        
+    //     // Explicitly grab only the array of IDs
+    //     $orderedIds = $request->validated()->toArray()['ordered_ids'] ?? [];
+    //     // Pass the parent (imageable) and the flat array
+    //     $this->service->reorder($image->imageable, $orderedIds);
+
+    //     return $this->success('Record updated successfully...');
+    // }
 
     /* =========================================================
      | DELETE
      ========================================================= */
 
-    public function destroy(Request $request, int $imageId)
+    public function destroy(Request $request, int $id): JsonResponse
     {
-        $this->authorizeAction($request);
+        $orgId = $this->getActiveOrgId($request);
+        $image = $this->service->find($id, $orgId);
 
-        $image = ProductImage::findOrFail($imageId);
-
+        $this->authorizeAction($request, $image);
         $this->service->delete($image);
 
         return $this->deleted('Image deleted successfully.');
     }
 
-    /* =========================================================
-     | RESTORE
-     ========================================================= */
-
-    public function restore(Request $request, int $imageId)
+    public function restore(Request $request, int $id): JsonResponse
     {
-        $this->authorizeAction($request);
+        $this->ensureAdmin($request);
+        $image = $this->service->find($id, $this->getActiveOrgId($request), true);
 
-        $image = ProductImage::withTrashed()
-            ->findOrFail($imageId);
-
+        $this->authorizeAction($request, $image);
         $this->service->restore($image);
 
-        return $this->success([
-            'message' => 'Image restored successfully.'
-        ]);
+        return $this->success(['message' => 'Image restored successfully.']);
     }
 
-    /* =========================================================
-     | FORCE DELETE
-     ========================================================= */
-
-    public function forceDelete(Request $request, int $imageId)
+    public function forceDelete(Request $request, int $id): JsonResponse
     {
-        $this->authorizeAction($request);
+        $this->ensureAdmin($request);
+        $image = $this->service->find($id, $this->getActiveOrgId($request), true);
 
-        $image = ProductImage::withTrashed()
-            ->findOrFail($imageId);
-
+        $this->authorizeAction($request, $image);
         $this->service->forceDelete($image);
 
         return $this->deleted('Image permanently deleted.');

@@ -5,7 +5,7 @@ namespace App\Http\Requests\Inventory;
 use App\Http\Requests\BaseFormRequest;
 
 
-class StoreProductVariantDiscountRequest extends BaseFormRequest
+class StoreBulkProductVariantDiscountRequest extends BaseFormRequest
 {
     public function authorize(): bool
     {
@@ -26,6 +26,10 @@ class StoreProductVariantDiscountRequest extends BaseFormRequest
             'start_date' => ['nullable', 'date'],
             'end_date' => ['nullable', 'date', 'after_or_equal:start_date'],
             'is_active' => ['boolean'],
+
+            // Single Discount applied on bulk items
+            'items' => ['required', 'array', 'min:1'],
+            'items.*.product_variant_id' => ['required', 'integer', 'exists:product_variants,id'],
         ];
     }
 }

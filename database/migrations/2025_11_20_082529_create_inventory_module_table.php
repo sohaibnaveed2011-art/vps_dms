@@ -121,6 +121,7 @@ return new class extends Migration
 
         Schema::create('product_variants', function (Blueprint $table) {
             $table->id();
+            $table->foreignId('organization_id')->constrained()->cascadeOnDelete();
             $table->foreignId('product_id')->constrained()->cascadeOnDelete();
             $table->string('sku');
             $table->string('barcode')->nullable();
@@ -194,9 +195,10 @@ return new class extends Migration
             $table->foreignId('organization_id')->constrained()->cascadeOnDelete();
             $table->foreignId('product_variant_id')->constrained()->cascadeOnDelete();
             $table->morphs('priceable');
-            // Organization | Branch | Outlet | StockLocation
+            // Branch | Outlet | StockLocation
             $table->decimal('cost_price', 18, 6)->nullable(); // Override Cost Price
             $table->decimal('sale_price', 18, 6)->nullable(); // Override Sale Price at hierarchy level, higher priority than base price
+            $table->boolean('is_override')->default(false); // true if this price record is meant to override base price
             $table->timestamps();
             $table->softDeletes();
             $table->unique(
@@ -218,7 +220,10 @@ return new class extends Migration
                 'pv_disc_morph_index'
             );
             $table->enum('type', ['percentage', 'fixed']);
-            $table->decimal('value', 18, 6);
+            $table->unsignedInteger('priority')->default(1);
+            $table->boolean('stackable')->default(false);
+            $table->decimal('max_discount_amount', 18, 6)->nullable();
+            $table->decimal('value', 18, 6); // same column will be used for discount type....
             $table->date('start_date')->nullable();
             $table->date('end_date')->nullable();
             $table->boolean('is_active')->default(true);
@@ -278,6 +283,8 @@ return new class extends Migration
             $table->string('code')->nullable();
             // storage | transit | virtual | mobile | customer
             $table->enum('type', ['storage', 'transit', 'virtual', 'mobile', 'customer'])->default('storage');
+            $table->string('path')->nullable()->index(); // e.g. "Warehouse A > Aisle 3 > Shelf 2"
+            $table->unsignedInteger('level')->default(1);
             $table->boolean('is_active')->default(true);
             $table->timestamps();
             $table->softDeletes();
@@ -486,6 +493,9 @@ return new class extends Migration
             $table->foreignId('product_variant_id')->constrained()->cascadeOnDelete();
             $table->decimal('price', 18, 6); // Selling price for this variant in the price list
             $table->decimal('min_quantity', 18, 6)->nullable(); // Minimum quantity for this price tier
+            $table->timestamp('starts_at')->nullable(); // Optional validity period for this price tier
+            $table->timestamp('ends_at')->nullable();
+            $table->unsignedInteger('priority')->default(1);
             $table->timestamps();
             $table->softDeletes();            
             $table->unique(['price_list_id', 'product_variant_id', 'min_quantity'], 'pli_unique_price_tier');

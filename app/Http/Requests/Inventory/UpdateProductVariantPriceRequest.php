@@ -14,10 +14,12 @@ class UpdateProductVariantPriceRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'priceable_type' => ['nullable', 'string'],
-            'priceable_id' => ['nullable', 'integer'],
+            'product_variant_id' => ['sometimes','required', 'integer', 'exists:product_variants,id'],
+            'priceable_type' => ['sometimes','required', 'string'],
+            'priceable_id' => ['sometimes','required', 'integer'],
             'cost_price' => ['nullable', 'numeric'],
             'sale_price' => ['nullable', 'numeric'],
+            'is_override' => ['boolean'],
         ];
     }
 }

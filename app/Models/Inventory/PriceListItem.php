@@ -11,6 +11,16 @@ class PriceListItem extends Model
         'price_list_id',
         'product_variant_id',
         'price',
+        'min_quantity',
+        'starts_at',
+        'ends_at',
+        'priority',
+    ];
+
+    protected $casts = [
+        'starts_at' => 'datetime',
+        'ends_at' => 'datetime',
+        'priority' => 'integer',
     ];
 
     public function priceList()

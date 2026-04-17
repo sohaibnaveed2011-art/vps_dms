@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 
 class Product extends Model
 {
@@ -31,10 +32,10 @@ class Product extends Model
     {
         return $this->belongsToMany(Variation::class, 'product_variation', 'product_id', 'variation_id')->using(ProductVariation::class)->withTimestamps();
     }
-
     public function variants(): HasMany { return $this->hasMany(ProductVariant::class); }
     public function organization(): BelongsTo { return $this->belongsTo(Organization::class); }
     public function category(): BelongsTo { return $this->belongsTo(Category::class); }
     public function brand(): BelongsTo { return $this->belongsTo(Brand::class); }
     public function tax(): BelongsTo { return $this->belongsTo(Tax::class); }
+    public function images(): MorphMany { return $this->morphMany(ProductImage::class, 'imageable')->orderBy('sort_order'); }
 }

@@ -14,13 +14,16 @@ class UpdateProductVariantDiscountRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'discountable_type' => ['nullable', 'string'],
-            'discountable_id' => ['nullable', 'integer'],
-            'type' => ['nullable', 'in:percentage,fixed'],
-            'value' => ['nullable', 'numeric', 'min:0'],
+            'discountable_type' => ['sometimes', 'string'],
+            'discountable_id' => ['sometimes', 'integer'],
+            'type' => ['sometimes', 'in:percentage,fixed'],
+            'value' => ['sometimes', 'numeric', 'min:0'],
+            'priority' => ['nullable', 'integer'],
+            'stackable' => ['nullable', 'boolean'],
+            'max_discount_amount' => ['nullable', 'numeric', 'min:0'],
             'start_date' => ['nullable', 'date'],
-            'end_date' => ['nullable', 'date'],
-            'is_active' => ['nullable', 'boolean'],
+            'end_date' => ['nullable', 'date', 'after_or_equal:start_date'],
+            'is_active' => ['boolean'],
         ];
     }
 }

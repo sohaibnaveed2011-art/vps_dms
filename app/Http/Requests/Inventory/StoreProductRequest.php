@@ -33,27 +33,20 @@ class StoreProductRequest extends BaseFormRequest
             'category_id' => ['nullable', 'integer', 'exists:categories,id'],
             'brand_id'    => ['nullable', 'integer', 'exists:brands,id'],
             'tax_id'      => ['nullable', 'integer', 'exists:taxes,id'],
-
             'description' => ['nullable', 'string'],
             'valuation_method' => ['required', Rule::in(['FIFO','FEFO','WAVG'])],
-
             'has_warranty' => ['boolean'],
             'warranty_months' => ['nullable','integer','min:1'],
-
             'has_variants' => ['boolean'],
             'is_active' => ['boolean'],
+            'images' => 'nullable|array',
+            'images.*' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048',
             
             /* -------------------------------------------------
             | PRODUCT VARIATIONS (Attributes used by this product)
             ------------------------------------------------- */
-            'variation_ids' => [
-                'required_if:has_variants,true', 
-                'array'
-            ],
-            'variation_ids.*' => [
-                'integer', 
-                'exists:variations,id'
-            ],
+            'variation_ids' => ['required_if:has_variants,true', 'array'],
+            'variation_ids.*' => ['integer', 'exists:variations,id'],
             
             /* -------------------------------------------------
              | VARIANTS
@@ -61,11 +54,7 @@ class StoreProductRequest extends BaseFormRequest
 
             'variants' => ['required','array','min:1'],
 
-            'variants.*.sku' => [
-                'required',
-                'string',
-                'max:255'
-            ],
+            'variants.*.sku' => ['required', 'string', 'max:255'],
 
             'variants.*.barcode' => ['nullable','string','max:255'],
 
@@ -80,11 +69,7 @@ class StoreProductRequest extends BaseFormRequest
 
             'variants.*.units' => ['required','array','min:1'],
 
-            'variants.*.units.*.unit_id' => [
-                'required',
-                'integer',
-                'exists:units,id'
-            ],
+            'variants.*.units.*.unit_id' => ['required', 'integer', 'exists:units,id'],
 
             'variants.*.units.*.conversion_factor' => [
                 'required',
@@ -113,11 +98,13 @@ class StoreProductRequest extends BaseFormRequest
              | VARIATION VALUES
              ------------------------------------------------- */
 
-            'variants.*.variation_value_ids' => ['nullable','array'],
-            'variants.*.variation_value_ids.*' => [
-                'integer',
-                'exists:variation_values,id'
-            ],
+            'variants.*.variation_value_ids' => ['nullable', 'array'],
+            'variants.*.variation_value_ids.*' => ['integer', 'exists:variation_values,id'],
+            /* -------------------------------------------------
+             | VARIATION IMAGES
+             ------------------------------------------------- */
+            'variants.*.images' => 'nullable|array',
+            'variants.*.images.*' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048',
         ];
     }
 }

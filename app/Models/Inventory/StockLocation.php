@@ -16,11 +16,15 @@ class StockLocation extends Model
         'locatable_id',
         'name',
         'code',
+        'type',
+        'path',
+        'level',
         'is_active',
     ];
 
     protected $casts = [
         'is_active' => 'boolean',
+        'level' => 'integer',
     ];
 
     protected static function boot()

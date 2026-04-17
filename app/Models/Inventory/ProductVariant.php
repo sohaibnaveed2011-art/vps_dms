@@ -2,8 +2,14 @@
 
 namespace App\Models\Inventory;
 
+use App\Models\Core\Organization;
+use App\Models\Inventory\Product;
+use App\Models\Inventory\ProductVariantUnit;
+use App\Models\Inventory\VariationValue;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class ProductVariant extends Model
@@ -11,6 +17,7 @@ class ProductVariant extends Model
     use HasFactory, SoftDeletes;
 
     protected $fillable = [
+        'organization_id',
         'product_id',
         'sku', // special code for internal use
         'barcode', // external code like universal product code (UPC).
@@ -42,6 +49,13 @@ class ProductVariant extends Model
         return $this->belongsToMany(
             VariationValue::class,
             'product_variant_variation_value'
-        );
+        )->withTimestamps();
     }
+
+    public function organization(): BelongsTo
+    {
+        return $this->belongsTo(Organization::class);
+    }
+
+    public function images(): MorphMany { return $this->morphMany(ProductImage::class, 'imageable')->orderBy('sort_order'); }
 }
