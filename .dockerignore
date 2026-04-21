@@ -14,6 +14,7 @@ vendor
 docker-networks/
 infrastructure/
 *_data/
+reports
 
 # Ignore documentation and logs
 README.md

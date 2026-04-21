@@ -11,12 +11,8 @@ use Illuminate\Http\Request;
 
 class ReceiptNoteController extends Controller
 {
-    protected ReceiptNoteService $service;
-
-    public function __construct(ReceiptNoteService $service)
-    {
-        $this->service = $service;
-    }
+    public function __construct(protected ReceiptNoteService $service)
+    {}
 
     public function index(Request $request)
     {

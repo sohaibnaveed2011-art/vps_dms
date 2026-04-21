@@ -4,7 +4,7 @@ namespace App\Http\Requests\Inventory;
 
 use App\Http\Requests\BaseFormRequest;
 
-class BulkProductVariantDiscountRequest extends BaseFormRequest
+class BulkProductVariantPriceRequest extends BaseFormRequest
 {
     public function rules(): array
     {

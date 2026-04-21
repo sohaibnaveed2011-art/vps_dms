@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\v1\api\Inventory;
 
 use App\Http\Controllers\v1\api\BaseApiController;
-use App\Http\Requests\Inventory\StoreProductBulkVariantPriceRequest;
+use App\Http\Requests\Inventory\BulkProductVariantPriceRequest;
 use App\Http\Requests\Inventory\StoreProductVariantPriceRequest;
 use App\Http\Requests\Inventory\UpdateProductVariantPriceRequest;
 use App\Http\Resources\Inventory\ProductVariantPriceResource;
@@ -93,7 +93,7 @@ class ProductVariantPriceController extends BaseApiController
     /**
      * 🔥 BULK API
      */
-    public function bulk(StoreProductBulkVariantPriceRequest $request): JsonResponse
+    public function bulk(BulkProductVariantPriceRequest $request): JsonResponse
     {
         $this->authorizeAction($request);
         $this->enforcePolicy($request, 'inventory');

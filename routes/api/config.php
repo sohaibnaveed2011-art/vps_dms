@@ -3,16 +3,16 @@
 /* =========================================================
 | CORE CONTROLLERS
 ========================================================= */
-use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\v1\api\Core\OrganizationController;
-use App\Http\Controllers\v1\api\Core\FinancialYearController;
-use App\Http\Controllers\v1\api\Core\TaxController;
-use App\Http\Controllers\v1\api\Core\SectionCategoryController;
 use App\Http\Controllers\v1\api\Core\BranchController;
-use App\Http\Controllers\v1\api\Core\WarehouseController;
-use App\Http\Controllers\v1\api\Core\WarehouseSectionController;
+use App\Http\Controllers\v1\api\Core\FinancialYearController;
+use App\Http\Controllers\v1\api\Core\OrganizationController;
 use App\Http\Controllers\v1\api\Core\OutletController;
 use App\Http\Controllers\v1\api\Core\OutletSectionController;
+use App\Http\Controllers\v1\api\Core\SectionCategoryController;
+use App\Http\Controllers\v1\api\Core\TaxController;
+use App\Http\Controllers\v1\api\Core\WarehouseController;
+use App\Http\Controllers\v1\api\Core\WarehouseSectionController;
+use Illuminate\Support\Facades\Route;
 
 Route::middleware('ability:core.*')->group(function () {
     Route::apiResource('organizations', OrganizationController::class)->except('store');

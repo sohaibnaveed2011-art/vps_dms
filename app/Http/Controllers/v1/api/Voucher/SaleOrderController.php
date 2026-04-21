@@ -28,7 +28,7 @@ class SaleOrderController extends BaseApiController
         protected SaleOrderService $service,
         protected VoucherWorkflowService $workflow
     ) {
-        parent::__construct(app(\App\Services\Auth\AuthorizationService::class));
+        parent::__construct();
     }
 
     /* =========================================================
