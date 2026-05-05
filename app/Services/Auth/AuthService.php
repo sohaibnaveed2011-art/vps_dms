@@ -12,9 +12,9 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Str;
-use InvalidArgumentException;
+use Illuminate\Validation\ValidationException;
 use Laravel\Sanctum\PersonalAccessToken;
-use RuntimeException;
+use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 
 class AuthService
 {
@@ -49,7 +49,7 @@ class AuthService
         }
 
         if (! $user->activeContext()) {
-            throw new RuntimeException('No active context selected.');
+            throw new AccessDeniedHttpException('No active context selected.');
         }
     }
 
@@ -106,11 +106,11 @@ class AuthService
         $user = User::where('email', $email)->first();
 
         if (! $user || ! Hash::check($password, $user->password)) {
-            throw new InvalidArgumentException('Invalid credentials.');
+            throw new ValidationException('Invalid credentials.');
         }
 
         if (! $user->is_active) {
-            throw new RuntimeException('Account disabled.');
+            throw new AccessDeniedHttpException('Account disabled.');
         }
 
         /*
@@ -145,7 +145,7 @@ class AuthService
             ->get();
 
         if ($assignments->isEmpty()) {
-            throw new RuntimeException(
+            throw new AccessDeniedHttpException(
                 'No active role assigned. Please contact administrator.'
             );
         }
