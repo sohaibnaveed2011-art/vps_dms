@@ -119,11 +119,6 @@ return new class extends Migration
             $table->index(['branch_id', 'warehouse_id', 'outlet_id']);
             $table->index(['account_id', 'created_at']);
             $table->index(['journal_id']);
-            
-            // FIX: Specify key length for TEXT column index
-            // MySQL requires key length for TEXT/BLOB columns in indexes
-            // Using 191 characters (common for utf8mb4) or you can use 255
-            $table->index(['line_memo' => 191], 'journal_lines_line_memo_index');
         });
 
         /*
