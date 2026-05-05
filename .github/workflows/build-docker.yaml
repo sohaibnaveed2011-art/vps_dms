@@ -6,7 +6,7 @@ on:
       - main
       - master
       - production
-  workflow_dispatch:  # Manual trigger
+  workflow_dispatch:
 
 jobs:
   build-and-push:
@@ -22,7 +22,7 @@ jobs:
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          username: sohaib2naveed  # Hardcoded - safe
           password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
       
       - name: Build and push Docker image
@@ -37,9 +37,9 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
       
-      - name: Image info
+      - name: Verify push
         run: |
-          echo "✅ Image pushed successfully!"
-          echo "Tags: sohaib2naveed/vps_dms:v1"
-          echo "Commit: ${{ github.sha }}"
-          echo "Watchtower will auto-update your VPS in 5-10 minutes"
+          echo "✅ Successfully pushed to Docker Hub!"
+          echo "📦 Image: sohaib2naveed/vps_dms:v1"
+          echo "🔗 https://hub.docker.com/r/sohaib2naveed/vps_dms"
+          echo "🔄 Watchtower will auto-update your VPS in 5-10 minutes"
