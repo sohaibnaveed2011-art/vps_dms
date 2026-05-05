@@ -41,7 +41,7 @@ RUN chown -R www-data:www-data storage bootstrap/cache public && \
     chmod -R 775 storage bootstrap/cache
 
 # Copy entrypoint script
-COPY docker/production/docker-entrypoint.sh /usr/local/bin/
+COPY ./docker/production/docker-entrypoint.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 EXPOSE 8000
