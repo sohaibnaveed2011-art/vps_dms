@@ -31,7 +31,6 @@
 /auth.json
 /local
 /prod
-/docker
 Homestead.json
 Homestead.yaml
 Thumbs.db
