@@ -1,3 +1,5 @@
+version: '3.8'
+
 services:
   # Main Application
   app:
@@ -21,9 +23,9 @@ services:
       - DB_USERNAME=eposuser
       - DB_PASSWORD=epospass
       
-      # Redis - CRITICAL: Use correct hostname
+      # Redis
       - REDIS_CLIENT=phpredis
-      - REDIS_HOST=redis-server  # Must match container name
+      - REDIS_HOST=redis-server
       - REDIS_PASSWORD=null
       - REDIS_PORT=6379
       
@@ -62,15 +64,15 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
-    depends_on:
-      redis-server:
-        condition: service_healthy
-      epos-db-rest2:
-        condition: service_healthy
-      # rabbit:
-      #   condition: service_healthy
+    # Remove depends_on for external services - they exist independently
+    # Add startup delay to ensure network is ready
+    entrypoint: >
+      sh -c "
+        sleep 5;
+        /usr/local/bin/docker-entrypoint.sh php artisan serve --host=0.0.0.0 --port=8000
+      "
 
-  # Queue Worker - FIXED
+  # Queue Worker
   queue:
     image: sohaib2naveed/vps_dms:v1
     container_name: dms_admin_queue
@@ -89,7 +91,7 @@ services:
       - DB_USERNAME=eposuser
       - DB_PASSWORD=epospass
       
-      # Redis - MUST match running container
+      # Redis
       - REDIS_CLIENT=phpredis
       - REDIS_HOST=redis-server
       - REDIS_PASSWORD=null
@@ -105,22 +107,38 @@ services:
       
     command: >
       sh -c "
-        echo 'Waiting for database and redis...';
-        for i in 1 2 3 4 5 6 7 8 9 10; do
-          php artisan tinker --execute=\"try { DB::connection()->getPdo(); echo 'DB OK\n'; } catch(Exception \$e) { exit(1); }\" && break || sleep 5;
+        echo '=== Queue Worker Starting ===';
+        echo 'Container started at: '$(date);
+        
+        # Wait for database
+        echo 'Waiting for database (epos-db-rest2:3306)...';
+        for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+          if php artisan db:show 2>/dev/null | grep -q 'Database'; then
+            echo '✅ Database ready after ' $i ' attempts';
+            break;
+          fi;
+          echo \"Waiting for database... (\$i/15)\";
+          sleep 3;
         done;
-        echo 'Starting queue worker...';
+        
+        # Wait for Redis
+        echo 'Waiting for Redis (redis-server:6379)...';
+        for i in 1 2 3 4 5 6 7 8 9 10; do
+          if php artisan tinker --execute=\"try { Redis::ping(); echo 'OK'; } catch(Exception \$e) { exit(1); }\" 2>/dev/null | grep -q 'OK'; then
+            echo '✅ Redis ready after ' $i ' attempts';
+            break;
+          fi;
+          echo \"Waiting for Redis... (\$i/10)\";
+          sleep 3;
+        done;
+        
+        echo 'All dependencies ready. Starting queue worker...';
         exec php artisan queue:work redis --tries=3 --sleep=3 --timeout=90 --verbose
       "
     networks:
       - epos-net
     volumes:
       - dms_storage:/app/storage
-    depends_on:
-      redis-server:
-        condition: service_healthy
-      epos-db-rest2:
-        condition: service_healthy
 
   # Reverb WebSocket Server
   reverb:
@@ -159,14 +177,24 @@ services:
       
       - SERVICE_ROLE=reverb
       
-    command: php artisan reverb:start --host=0.0.0.0 --port=9080
+    command: >
+      sh -c "
+        echo '=== Reverb Server Starting ===';
+        echo 'Waiting for Redis...';
+        for i in 1 2 3 4 5; do
+          if php artisan tinker --execute=\"try { Redis::ping(); echo 'OK'; } catch(Exception \$e) { exit(1); }\" 2>/dev/null | grep -q 'OK'; then
+            echo '✅ Redis ready';
+            break;
+          fi;
+          echo \"Waiting for Redis... (\$i/5)\";
+          sleep 3;
+        done;
+        exec php artisan reverb:start --host=0.0.0.0 --port=9080 --debug
+      "
     networks:
       - epos-net
-    depends_on:
-      redis-server:
-        condition: service_healthy
 
-  # Scheduler
+  # Scheduler for Cron Jobs
   scheduler:
     image: sohaib2naveed/vps_dms:v1
     container_name: dms_admin_scheduler
@@ -198,19 +226,17 @@ services:
       
     command: >
       sh -c "
-        echo 'Starting scheduler...';
+        echo '=== Scheduler Starting ===';
+        echo 'Scheduler will run every minute';
         while true; do
+          echo 'Running scheduler at '$(date);
           php artisan schedule:run --verbose --no-interaction || true;
+          echo 'Sleeping for 60 seconds...';
           sleep 60;
         done
       "
     networks:
       - epos-net
-    depends_on:
-      redis-server:
-        condition: service_healthy
-      epos-db-rest2:
-        condition: service_healthy
 
 networks:
   epos-net:
