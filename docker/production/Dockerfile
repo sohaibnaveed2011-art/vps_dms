@@ -19,6 +19,11 @@ WORKDIR /app
 # Copy application files
 COPY . .
 
+# Create .env from .env.example for production
+RUN if [ ! -f .env ]; then \
+        cp .env.example .env; \
+    fi
+
 # Create necessary directories with proper permissions
 RUN mkdir -p storage/framework/{sessions,views,cache} storage/logs bootstrap/cache && \
     touch storage/logs/laravel.log && \
