@@ -41,6 +41,3 @@ Thumbs.db
 /.phpunit.result.cache
 /reports
 phpunit.xml
-
-# Docker
-!.github/workflows/deploy.yml
