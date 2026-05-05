@@ -1,7 +1,7 @@
 services:
   # Main Application
   app:
-    image: sohaib2naveed/vps_dms:v1
+    image: sohaib2naveed/vps_dms:v2  # Update to your new build
     container_name: dms_admin_app
     restart: unless-stopped
     ports:
@@ -48,7 +48,9 @@ services:
       - REVERB_SCHEME=http
       
       - SERVICE_ROLE=app
-      - LOG_CHANNEL=stack
+
+      # Logging - CHANGED to 'single' for file logging
+      - LOG_CHANNEL=single
       - LOG_LEVEL=debug
       
     volumes:
@@ -62,17 +64,13 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
-    # Remove depends_on for external services - they exist independently
-    # Add startup delay to ensure network is ready
-    entrypoint: >
-      sh -c "
-        sleep 5;
-        /usr/local/bin/docker-entrypoint.sh php artisan serve --host=0.0.0.0 --port=8000
-      "
+    # SIMPLIFIED entrypoint
+    entrypoint: ["/usr/local/bin/docker-entrypoint.sh"]
+    command: ["php", "-S", "0.0.0.0:8000", "-t", "public"]
 
-  # Queue Worker - FIXED (no entrypoint)
+  # Queue Worker
   queue:
-    image: sohaib2naveed/vps_dms:v1
+    image: sohaib2naveed/vps_dms:v2  # Update to your new build
     container_name: dms_admin_queue
     restart: unless-stopped
     environment:
@@ -97,20 +95,26 @@ services:
       # Queue
       - QUEUE_CONNECTION=redis
       - CACHE_STORE=redis
+
+      # Logging - CHANGED to 'single'
+      - LOG_CHANNEL=single
+      - LOG_LEVEL=debug
       
-      # Disable entrypoint script
       - SERVICE_ROLE=queue
       
-    # Bypass entrypoint completely
-    entrypoint: [""]
-    command: php artisan queue:work --tries=3 --sleep=3 --verbose
+    entrypoint: ["/usr/local/bin/docker-entrypoint.sh"]
+    command: >
+      sh -c "
+        php artisan queue:work --tries=3 --sleep=3 --verbose 2>&1 | tee -a /app/storage/logs/queue.log
+      "
     networks:
       - epos-net
     volumes:
       - dms_storage:/app/storage
+      
   # Reverb WebSocket Server
   reverb:
-    image: sohaib2naveed/vps_dms:v1
+    image: sohaib2naveed/vps_dms:v2  # Update to your new build
     container_name: dms_admin_reverb
     restart: unless-stopped
     ports:
@@ -142,29 +146,34 @@ services:
       - REVERB_HOST=0.0.0.0
       - REVERB_PORT=9080
       - REVERB_SCHEME=http
-      
+
+      # Logging - CHANGED to 'single'
+      - LOG_CHANNEL=single
+      - LOG_LEVEL=debug
+         
       - SERVICE_ROLE=reverb
       
+    entrypoint: ["/usr/local/bin/docker-entrypoint.sh"]
     command: >
       sh -c "
-        echo '=== Reverb Server Starting ===';
-        echo 'Waiting for Redis...';
+        echo '=== Reverb Server Starting ===' | tee -a /app/storage/logs/reverb.log;
+        echo 'Waiting for Redis...' | tee -a /app/storage/logs/reverb.log;
         for i in 1 2 3 4 5; do
           if php artisan tinker --execute=\"try { Redis::ping(); echo 'OK'; } catch(Exception \$e) { exit(1); }\" 2>/dev/null | grep -q 'OK'; then
-            echo '✅ Redis ready';
+            echo '✅ Redis ready' | tee -a /app/storage/logs/reverb.log;
             break;
           fi;
-          echo \"Waiting for Redis... (\$i/5)\";
+          echo \"Waiting for Redis... (\$i/5)\" | tee -a /app/storage/logs/reverb.log;
           sleep 3;
         done;
-        exec php artisan reverb:start --host=0.0.0.0 --port=9080 --debug
+        exec php artisan reverb:start --host=0.0.0.0 --port=9080 --debug 2>&1 | tee -a /app/storage/logs/reverb.log
       "
     networks:
       - epos-net
 
   # Scheduler for Cron Jobs
   scheduler:
-    image: sohaib2naveed/vps_dms:v1
+    image: sohaib2naveed/vps_dms:v2  # Update to your new build
     container_name: dms_admin_scheduler
     restart: unless-stopped
     environment:
@@ -191,15 +200,19 @@ services:
       - CACHE_STORE=redis
       
       - SERVICE_ROLE=scheduler
+
+      # Logging - CHANGED to 'single'
+      - LOG_CHANNEL=single
+      - LOG_LEVEL=debug   
       
+    entrypoint: ["/usr/local/bin/docker-entrypoint.sh"]
     command: >
       sh -c "
-        echo '=== Scheduler Starting ===';
-        echo 'Scheduler will run every minute';
+        echo '=== Scheduler Starting ===' | tee -a /app/storage/logs/scheduler.log;
         while true; do
-          echo 'Running scheduler at '$(date);
-          php artisan schedule:run --verbose --no-interaction || true;
-          echo 'Sleeping for 60 seconds...';
+          echo \"Running scheduler at \$(date)\" | tee -a /app/storage/logs/scheduler.log;
+          php artisan schedule:run --verbose --no-interaction 2>&1 | tee -a /app/storage/logs/scheduler.log;
+          echo 'Sleeping for 60 seconds...' | tee -a /app/storage/logs/scheduler.log;
           sleep 60;
         done
       "
