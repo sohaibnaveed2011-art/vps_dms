@@ -18,12 +18,12 @@ class RoleController extends BaseApiController
      * 🔐 SYSTEM ADMIN ONLY
      */
     protected array $permissions = [
-        'index'           => 'rbac.role.view',
-        'store'           => 'rbac.role.create',
-        'show'            => 'rbac.role.show',
-        'update'          => 'rbac.role.update',
-        'destroy'         => 'rbac.role.delete',
-        'syncPermissions' => 'rbac.role.update',
+        'index'           => 'auth.role.view',
+        'store'           => 'auth.role.create',//Szj@9881381
+        'show'            => 'auth.role.show',
+        'update'          => 'auth.role.update',
+        'destroy'         => 'auth.role.destroy',
+        'syncPermissions' => 'auth.role.update',
     ];
 
     public function __construct(protected RoleService $service)
@@ -80,21 +80,21 @@ class RoleController extends BaseApiController
         return $this->updated('Role updated successfully.');
     }
 
-public function destroy(Request $request, int $id)
-{
-    $this->authorizeAction($request);
-    $this->ensureAdmin($request);
+    public function destroy(Request $request, int $id)
+    {
+        $this->authorizeAction($request);
+        $this->ensureAdmin($request);
 
-    // 1. Find it
-    $role = $this->service->find($id)
-        ?? throw new NotFoundException('Role not found.');
+        // 1. Find it
+        $role = $this->service->find($id)
+            ?? throw new NotFoundException('Role not found.');
 
-    // 2. Try to delete it
-    $this->service->delete($role);
+        // 2. Try to delete it
+        $this->service->delete($role);
 
-    // 3. Respond
-    return $this->deleted('Role deleted successfully.');
-}
+        // 3. Respond
+        return $this->deleted('Role deleted successfully.');
+    }
 
     public function syncPermissions(SyncRolePermissionsRequest $request, int $id)
     {

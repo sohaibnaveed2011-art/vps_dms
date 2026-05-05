@@ -36,6 +36,7 @@ class DatabaseSeeder extends Seeder
                 VariationValuesSeeder::class,
                 BrandSeeder::class,
                 VoucherTypeSeeder::class,
+                AccountSeeder::class,
             ]);
         }
         

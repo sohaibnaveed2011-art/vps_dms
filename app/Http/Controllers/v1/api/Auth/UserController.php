@@ -81,7 +81,7 @@ class UserController extends BaseApiController
         $user = $this->service->find($id);
 
         $this->authorizeAction($request, $user);
-
+  
         $this->service->delete($user);
 
         return $this->deleted('User deleted successfully.');

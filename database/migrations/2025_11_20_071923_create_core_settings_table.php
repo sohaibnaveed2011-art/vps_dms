@@ -56,6 +56,7 @@ return new class extends Migration
             $table->timestamps();
             $table->softDeletes();
             $table->unique(['organization_id','name']);
+            $table->index(['organization_id','is_active']);
             $table->index(['organization_id','start_date','end_date']);
         });
 

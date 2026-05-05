@@ -1,24 +1,51 @@
-# Ignore Git metadata
+# Git
 .git
+.gitignore
 .github
 
-# Ignore local environment files (Inject these via Compose instead)
+# Environment files
 .env
-.env.example
+.env.*
+!.env.example
 
-# Ignore local dependencies (Let the Dockerfile run composer/npm install)
+# Dependencies
 node_modules
 vendor
 
-# Ignore local data persistence folders
-docker-networks/
-infrastructure/
-*_data/
+# Build outputs
+public/build
+public/hot
+public/storage
+storage/*.key
+storage/pail
+storage/logs/*.log
+
+# Local development
+docker-compose*.yml
+docker/
+.DS_Store
+Homestead.json
+Homestead.yaml
+Thumbs.db
+
+# IDE files
+.idea
+.vscode
+.phpactor.json
+.phpunit.result.cache
+
+# Testing
+tests
+phpunit.xml
+*.log
 reports
 
-# Ignore documentation and logs
+# Documentation
 README.md
-.dockerignore
-Dockerfile
-docker-compose.yml
-storage/logs/*.log
+*.md
+docs/
+
+# Local volumes
+*_data/
+docker-networks/
+infrastructure/

@@ -5,7 +5,7 @@ namespace App\Models\Voucher;
 use App\Models\Core\Organization;
 use App\Models\Core\Tax;
 use App\Models\Inventory\Batch;
-use App\Models\Inventory\Item;
+use App\Models\Inventory\ProductVariant;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -21,7 +21,7 @@ class DocumentItem extends Model
         'organization_id',
         'document_type',
         'document_id',
-        'item_id',
+        'product_variant_id',
         'tax_id',
         'batch_id',
         'cost_of_goods_sold',
@@ -44,9 +44,9 @@ class DocumentItem extends Model
 
     // Relationships
     public function organization(): BelongsTo { return $this->belongsTo(Organization::class); }
-    public function item(): BelongsTo { return $this->belongsTo(Item::class); }
+    public function item(): BelongsTo { return $this->belongsTo(ProductVariant::class); }
     public function tax(): BelongsTo { return $this->belongsTo(Tax::class); }
-    public function batch(): BelongsTo { return $this->belongsTo(Batch::class); } // Optional
+    // public function batch(): BelongsTo { return $this->belongsTo(Batch::class); } // Optional
 
     public function document(): MorphTo // Links back to Invoice, PO, DN, etc.
     {

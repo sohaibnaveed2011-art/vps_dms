@@ -50,7 +50,7 @@ Route::prefix('v1')->group(function () {
         /* ===============================================
         | RBAC (NO CONTEXT REQUIRED)
         ================================================= */
-        Route::prefix('rbac')->middleware('ability:rbac.*')->group(function () {
+        Route::prefix('rbac')->middleware('ability:auth.*')->group(function () {
             Route::apiResource('roles', RoleController::class);
             Route::apiResource('permissions', PermissionController::class);
             Route::put('roles/{role}/sync-permissions', [RoleController::class, 'syncPermissions']);
@@ -102,6 +102,10 @@ Route::prefix('v1')->group(function () {
              | VOUCHERS
              ========================= */
             require __DIR__.'/api/voucher.php';
+            /* =========================
+             | ACCOUNT
+             ========================= */
+            require __DIR__.'/api/account.php';
         });
     });
 });

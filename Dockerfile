@@ -1,30 +1,41 @@
 FROM php:8.3-fpm
 
-# 1. Install system dependencies + Node.js
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     git unzip libzip-dev libpng-dev libonig-dev libicu-dev \
     curl gnupg \
     && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y nodejs \
+    && docker-php-ext-install pdo_mysql mysqli sockets zip mbstring gd intl bcmath pcntl \
     && pecl install redis \
     && docker-php-ext-enable redis \
-    && docker-php-ext-install pdo pdo_mysql sockets zip mbstring gd intl bcmath pcntl
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# 2. Install Composer
+# Install Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
 WORKDIR /app
 
-# 3. Copy files and install dependencies
+# Copy application files
 COPY . .
-RUN composer install --no-interaction --no-scripts --prefer-dist \
-    && npm install \
-    && npm run build
 
-# 4. Permissions
-RUN chown -R www-data:www-data /app/storage /app/bootstrap/cache \
-    && chmod -R 775 /app/storage /app/bootstrap/cache
+# Create health check endpoint
+RUN mkdir -p public && echo "<?php echo 'ok';" > public/health
 
-# 5. Production Command
-# Note: We bind to 0.0.0.0 so Docker can map the internal port to your external port
+# Install PHP dependencies
+RUN if [ -f "composer.json" ]; then \
+        composer install --no-interaction --no-scripts --prefer-dist || true; \
+    fi
+
+# Install NPM dependencies (if exists)
+RUN if [ -f "package.json" ]; then \
+        npm install --silent || true; \
+    fi
+
+# Set permissions
+RUN chown -R www-data:www-data /app/storage /app/bootstrap/cache 2>/dev/null || true
+
+EXPOSE 8000
+
+# Default command (can be overridden)
 CMD ["php", "artisan", "serve", "--host=0.0.0.0", "--port=8000"]

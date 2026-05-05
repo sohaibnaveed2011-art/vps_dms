@@ -18,13 +18,13 @@ class VoucherTypeSeeder extends Seeder
             ['prefix' => 'INV',  'name' => 'Sale Invoice',           'module' => 'sale'],
             ['prefix' => 'SO',   'name' => 'Sale Order',             'module' => 'sale'],
             ['prefix' => 'CN',   'name' => 'Credit Note',            'module' => 'sale'],
-            ['prefix' => 'GDN',  'name' => 'Goods Delivery Note',    'module' => 'inventory'],
+            ['prefix' => 'GDN',  'name' => 'Goods Delivery Note',    'module' => 'sale'],
 
             // Purchases & Expenses
             ['prefix' => 'BILL', 'name' => 'Purchase Bill',          'module' => 'purchase'],
             ['prefix' => 'PO',   'name' => 'Purchase Order',         'module' => 'purchase'],
             ['prefix' => 'DN',   'name' => 'Debit Note',             'module' => 'purchase'],
-            ['prefix' => 'GRN',  'name' => 'Goods Received Note',    'module' => 'inventory'],
+            ['prefix' => 'GRN',  'name' => 'Goods Received Note',    'module' => 'purchase'],
 
             // Accounts & Finance
             ['prefix' => 'CPV',  'name' => 'Cash Payment Voucher',   'module' => 'accounts'],

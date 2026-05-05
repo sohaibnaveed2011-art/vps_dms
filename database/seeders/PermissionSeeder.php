@@ -42,8 +42,8 @@ class PermissionSeeder extends Seeder
             /* ======================
              | RBAC (SYSTEM LEVEL)
              ====================== */
-            ...$this->crud('rbac', 'role'),
-            ...$this->crud('rbac', 'permission'),
+            ...$this->crud('auth', 'role'),
+            ...$this->crud('auth', 'permission'),
 
             /* ======================
              | USER MANAGEMENT
@@ -85,10 +85,17 @@ class PermissionSeeder extends Seeder
             ...$this->crud('inventory', 'unit'),
             ...$this->crud('inventory', 'variation'),
             ...$this->crud('inventory', 'variationValue'),
-            ...$this->crud('inventory', 'product'),
+            ...$this->crud('inventory', 'product'), 
             ...$this->crud('inventory', 'stockTransaction'),
             ...$this->crud('inventory', 'priceList'),
 
+            /* ======================
+             | ACCOUNT
+             ====================== */
+            ...$this->crud('accounts', 'account'),
+            'accounts.account.export',
+            'accounts.account.import',
+            
             /* ======================
              | VOUCHERS (Sale/Purchase)
              ====================== */
@@ -123,7 +130,8 @@ class PermissionSeeder extends Seeder
                   ->orWhere('name', 'like', 'core.%')
                   ->orWhere('name', 'like', 'inventory.%')
                   ->orWhere('name', 'like', 'partner.%')
-                  ->orWhere('name', 'like', 'voucher.%');
+                  ->orWhere('name', 'like', 'voucher.%')
+                  ->orWhere('name', 'like', 'accounts.%');
             })->get()
         );
     }

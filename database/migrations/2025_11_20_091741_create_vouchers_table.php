@@ -46,7 +46,7 @@ return new class extends Migration
             $table->foreignId('branch_id')->nullable()->constrained('branches')->nullOnDelete();
             $table->foreignId('warehouse_id')->nullable()->constrained('warehouses')->nullOnDelete();
             $table->foreignId('outlet_id')->nullable()->constrained('outlets')->nullOnDelete();
-
+            $table->foreignId('financial_year_id')->nullable()->constrained('financial_years')->restrictOnDelete();
             // Business fields
             $table->foreignId('customer_id')->constrained('customers')->cascadeOnDelete();
             $table->foreignId('voucher_type_id')->constrained('voucher_types')->cascadeOnDelete();
@@ -71,6 +71,8 @@ return new class extends Migration
             $table->softDeletes();
 
             // Helpful composite indexes
+            
+            $table->unique(['organization_id', 'voucher_type_id', 'document_number'], 'so_org_vt_dn_idx');
             $table->index(['organization_id', 'customer_id'], 'so_org_customer_idx');
             $table->index(['organization_id', 'voucher_type_id'], 'so_org_vt_idx');
             $table->index(['organization_id', 'status'], 'so_org_status_idx');
@@ -88,7 +90,7 @@ return new class extends Migration
             $table->char('currency_code', 3)->default('PKR');
             $table->decimal('exchange_rate', 18, 8)->default(1);
             $table->string('document_number');
-            $table->unique(['organization_id', 'document_number'], 'inv_org_docnum_unique');
+            $table->unique(['organization_id', 'branch_id', 'voucher_type_id', 'document_number'], 'idx_unique_doc_per_branch');
             $table->string('fbr_invoice_number')->nullable();
             $table->date('date')->index();
             $table->decimal('sub_total', 18, 4)->default(0);
@@ -108,6 +110,8 @@ return new class extends Migration
             $table->timestamp('approved_at')->nullable();
             $table->timestamps();
             $table->softDeletes();
+
+            $table->unique(['organization_id', 'voucher_type_id', 'document_number'], 'in_org_vt_dn_unique');
             $table->index(['organization_id', 'customer_id'], 'inv_org_customer_idx');
             $table->index(['organization_id', 'voucher_type_id'], 'inv_org_vt_idx');
             $table->index(['organization_id', 'status'], 'inv_org_status_idx');
@@ -123,7 +127,6 @@ return new class extends Migration
             $table->foreignId('voucher_type_id')->constrained('voucher_types');
 
             $table->string('document_number');
-            $table->unique(['organization_id', 'document_number'], 'cn_org_docnum_unique');
 
             $table->date('date')->index();
             $table->decimal('grand_total', 18, 4)->default(0);
@@ -144,7 +147,7 @@ return new class extends Migration
             $table->timestamp('approved_at')->nullable();
             $table->timestamps();
             $table->softDeletes();
-
+            $table->unique(['organization_id', 'voucher_type_id', 'document_number'], 'cn_org_vt_dn_unique');
             $table->index(['organization_id', 'invoice_id'], 'cn_org_invoice_idx');
         });
 
@@ -158,7 +161,6 @@ return new class extends Migration
 
             $table->foreignId('voucher_type_id')->constrained('voucher_types')->cascadeOnDelete();
             $table->string('document_number');
-            $table->unique(['organization_id', 'document_number'], 'dn_org_docnum_unique');
 
             $table->date('date')->index();
             $table->foreignId('rider_id')->nullable()->constrained('users')->nullOnDelete();
@@ -171,7 +173,7 @@ return new class extends Migration
             $table->timestamp('approved_at')->nullable();
             $table->timestamps();
             $table->softDeletes();
-
+            $table->unique(['organization_id', 'voucher_type_id', 'document_number'], 'dn_org_vt_dn_unique');
             $table->index(['organization_id', 'sale_order_id'], 'dn_org_so_idx');
             $table->index(['organization_id', 'invoice_id'], 'dn_org_inv_idx');
         });
@@ -189,9 +191,8 @@ return new class extends Migration
             $table->foreignId('branch_id')->nullable()->constrained('branches')->nullOnDelete();
             $table->foreignId('supplier_id')->constrained('suppliers')->cascadeOnDelete();
             $table->foreignId('voucher_type_id')->constrained('voucher_types')->cascadeOnDelete();
-
+            $table->foreignId('financial_year_id')->nullable()->constrained('financial_years')->restrictOnDelete(); 
             $table->string('document_number');
-            $table->unique(['organization_id', 'document_number'], 'po_org_docnum_unique');
 
             $table->date('order_date')->index();
             $table->date('expected_receipt_date')->nullable()->index();
@@ -207,7 +208,7 @@ return new class extends Migration
 
             $table->timestamps();
             $table->softDeletes();
-
+            $table->unique(['organization_id', 'voucher_type_id', 'document_number'], 'po_org_vt_dn_unique');
             $table->index(['organization_id', 'supplier_id'], 'po_org_supplier_idx');
             $table->index(['organization_id', 'status'], 'po_org_status_idx');
         });
@@ -221,7 +222,6 @@ return new class extends Migration
             $table->foreignId('supplier_id')->constrained('suppliers')->cascadeOnDelete();
             $table->foreignId('voucher_type_id')->constrained('voucher_types')->cascadeOnDelete();
             $table->string('document_number');
-            $table->unique(['organization_id', 'document_number'], 'pb_org_docnum_unique');
             $table->char('currency_code', 3)->default('PKR');
             $table->decimal('exchange_rate', 18, 8)->default(1);
             $table->string('supplier_invoice_number')->nullable();
@@ -241,7 +241,7 @@ return new class extends Migration
 
             $table->timestamps();
             $table->softDeletes();
-
+            $table->unique(['organization_id', 'voucher_type_id', 'document_number'], 'pb_org_vt_dn_unique');
             $table->index(['organization_id', 'supplier_id'], 'pb_org_supplier_idx');
             $table->index(['organization_id', 'status'], 'pb_org_status_idx');
         });
@@ -255,7 +255,6 @@ return new class extends Migration
             $table->foreignId('supplier_id')->constrained('suppliers')->cascadeOnDelete();
             $table->foreignId('voucher_type_id')->constrained('voucher_types')->cascadeOnDelete();
             $table->string('document_number');
-            $table->unique(['organization_id', 'document_number'], 'dbn_org_docnum_unique');
 
             $table->date('date')->index();
             $table->decimal('grand_total', 18, 4)->default(0);
@@ -271,7 +270,7 @@ return new class extends Migration
             $table->timestamp('approved_at')->nullable();
             $table->timestamps();
             $table->softDeletes();
-
+            $table->unique(['organization_id', 'voucher_type_id', 'document_number'], 'dbn_org_vt_dn_unique');
             $table->index(['organization_id', 'purchase_bill_id'], 'dbn_org_pb_idx');
         });
 
@@ -285,7 +284,6 @@ return new class extends Migration
 
             $table->foreignId('voucher_type_id')->constrained('voucher_types')->cascadeOnDelete();
             $table->string('document_number');
-            $table->unique(['organization_id', 'document_number'], 'grn_org_docnum_unique');
 
             $table->date('date')->index();
             $table->enum('status', ['received', 'inspected', 'rejected'])->default('received')->index();
@@ -298,7 +296,7 @@ return new class extends Migration
             $table->timestamp('approved_at')->nullable();
             $table->timestamps();
             $table->softDeletes();
-
+            $table->unique(['organization_id', 'voucher_type_id', 'document_number'], 'grn_org_vt_dn_unique');
             $table->index(['organization_id', 'purchase_order_id'], 'grn_org_po_idx');
             $table->index(['organization_id', 'purchase_bill_id'], 'grn_org_pb_idx');
         });
@@ -349,17 +347,19 @@ return new class extends Migration
         Schema::create('receipts', function (Blueprint $table) {
             $table->id();
 
-            $table->foreignId('organization_id')->constrained('organizations')->cascadeOnDelete();
-            $table->foreignId('customer_id')->constrained('customers')->cascadeOnDelete();
-
+            $table->foreignId('organization_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('branch_id')->nullable()->constrained()->nullOnDelete();
+            $table->foreignId('financial_year_id')->constrained('financial_years')->restrictOnDelete();
+            $table->foreignId('voucher_type_id')->constrained('voucher_types')->restrictOnDelete();
+            $table->foreignId('customer_id')->constrained()->cascadeOnDelete();
             // Reference to the document this payment relates to (invoice, advance, etc)
             $table->morphs('reference');
-
+            $table->string('document_number')->unique();
             $table->decimal('amount', 18, 4);
             $table->date('date')->index();
-
-            $table->foreignId('account_id')->constrained('accounts')->cascadeOnDelete();
+            $table->foreignId('account_id')->constrained('accounts')->restrictOnDelete();
             $table->string('reference_number')->nullable();
+            $table->boolean('is_posted')->default(false);
             $table->foreignId('journal_id')->nullable()->constrained('journals')->nullOnDelete();
             $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
             $table->foreignId('reviewed_by')->nullable()->constrained('users')->nullOnDelete();
@@ -379,16 +379,18 @@ return new class extends Migration
         Schema::create('payments', function (Blueprint $table) {
             $table->id();
 
-            $table->foreignId('organization_id')->constrained('organizations')->cascadeOnDelete();
-            $table->foreignId('supplier_id')->constrained('suppliers')->cascadeOnDelete();
-
+            $table->foreignId('organization_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('branch_id')->nullable()->constrained()->nullOnDelete();
+            $table->foreignId('financial_year_id')->constrained('financial_years')->restrictOnDelete();
+            $table->foreignId('voucher_type_id')->constrained('voucher_types')->restrictOnDelete();
+            $table->foreignId('supplier_id')->constrained()->cascadeOnDelete();
             $table->morphs('reference');
-
+            $table->string('document_number')->unique();
             $table->decimal('amount', 18, 4);
             $table->date('date')->index();
-
-            $table->foreignId('account_id')->constrained('accounts')->cascadeOnDelete();
+            $table->foreignId('account_id')->constrained('accounts')->restrictOnDelete();
             $table->string('reference_number')->nullable();
+            $table->boolean('is_posted')->default(false);
             $table->foreignId('journal_id')->nullable()->constrained('journals')->nullOnDelete();
             $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
             $table->foreignId('reviewed_by')->nullable()->constrained('users')->nullOnDelete();

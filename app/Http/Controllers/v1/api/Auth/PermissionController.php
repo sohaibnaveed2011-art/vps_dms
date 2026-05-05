@@ -14,10 +14,10 @@ use App\Exceptions\NotFoundException;
 class PermissionController extends BaseApiController
 {
     protected array $permissions = [
-        'index'   => 'rbac.permission.view',
-        'store'   => 'rbac.permission.create',
-        'update'  => 'rbac.permission.update',
-        'destroy' => 'rbac.permission.delete',
+        'index'   => 'auth.permission.view',
+        'store'   => 'auth.permission.create',
+        'update'  => 'auth.permission.update',
+        'destroy' => 'auth.permission.destroy',
     ];
 
     public function __construct(protected PermissionService $service)
