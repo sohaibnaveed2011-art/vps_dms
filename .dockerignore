@@ -20,32 +20,121 @@ storage/*.key
 storage/pail
 storage/logs/*.log
 
-# Local development
+# Local development files
 docker-compose*.yml
-docker/
 .DS_Store
 Homestead.json
 Homestead.yaml
 Thumbs.db
+*.pid
+*.seed
+*.sqlite
 
-# IDE files
+# IDE and editor files
 .idea
 .vscode
+*.swp
+*.swo
+*~
 .phpactor.json
 .phpunit.result.cache
+.php-cs-fixer.cache
 
 # Testing
 tests
 phpunit.xml
 *.log
 reports
+coverage
+coverage.xml
+.phpunit.result.cache
 
 # Documentation
 README.md
 *.md
 docs/
+wiki/
+CONTRIBUTING.md
+CODE_OF_CONDUCT.md
+SECURITY.md
 
-# Local volumes
+# Local volumes and data
 *_data/
 docker-networks/
 infrastructure/
+temp/
+tmp/
+cache/
+
+# OS files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Docker related (but keep production files)
+docker/development/
+docker/local/
+docker/*.local.yml
+docker/*.dev.yml
+!docker/production/
+!docker/production/Dockerfile
+!docker/production/docker-entrypoint.sh
+
+# CI/CD
+.github/workflows/
+.gitlab-ci.yml
+.travis.yml
+circle.yml
+azure-pipelines.yml
+bitbucket-pipelines.yml
+
+# Node.js
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# PHP specific
+composer.phar
+composer.lock  # Only if you want to generate it in container
+.phpunit.result.cache
+.phpstorm.meta.php
+_ide_helper.php
+_ide_helper_models.php
+
+# Laravel specific (if using Laravel)
+/.phan
+/.phpunit.cache
+/.vite
+
+# Certificates
+*.crt
+*.key
+*.pem
+certificates/
+
+# Archives and backups
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.bak
+*.old
+*.orig
+
+# Session files
+sessions/
+session/
+*.session
+
+# Logs
+*.log
+logs/
+error_log
+
+# Debug files
+debug/
+.xdebug*
+*.xdebug
