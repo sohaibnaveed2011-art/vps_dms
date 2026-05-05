@@ -43,5 +43,4 @@ Thumbs.db
 phpunit.xml
 
 # Docker
-docker-compose*.yml
 !.github/workflows/deploy.yml

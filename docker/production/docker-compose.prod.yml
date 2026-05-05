@@ -1,0 +1,275 @@
+services:
+  # Main Application
+  app:
+    image: sohaib2naveed/vps_dms:latest
+    container_name: dms_app_prod  # Consistent naming
+    restart: unless-stopped
+    ports:
+      - "9010:8000"
+    environment:
+      # Laravel Environment
+      - APP_ENV=production
+      - APP_DEBUG=false
+      - APP_NAME=DMS
+      - APP_URL=http://72.60.28.176:9010
+      - APP_KEY=${APP_KEY:-base64:s1dKNm4NGL9nwnFipyP8/hBSd8jAeDlSy4VnkVTPqeU=}  # Added default
+      
+      # Database
+      - DB_CONNECTION=mysql
+      - DB_HOST=epos-db-rest2
+      - DB_PORT=3306
+      - DB_DATABASE=dms
+      - DB_USERNAME=eposuser
+      - DB_PASSWORD=epospass
+      
+      # Redis
+      - REDIS_CLIENT=phpredis
+      - REDIS_HOST=redis-server
+      - REDIS_PASSWORD=null
+      - REDIS_PORT=6379
+      
+      # Cache & Queue
+      - CACHE_STORE=redis
+      - SESSION_DRIVER=redis
+      - QUEUE_CONNECTION=redis
+      
+      # RabbitMQ
+      - QUEUE_CONNECTION_RABBIT=rabbitmq
+      - RABBITMQ_HOST=rabbit
+      - RABBITMQ_PORT=5672
+      - RABBITMQ_VHOST=/
+      - RABBITMQ_LOGIN=naveed
+      - RABBITMQ_PASSWORD=nido@2025@!
+      
+      # Reverb - Using consistent port 9080
+      - REVERB_APP_ID=614842
+      - REVERB_APP_KEY=rytlcwu5ftkwp7a4rxk3
+      - REVERB_APP_SECRET=muvinidosh1mnf9nu1h2
+      - REVERB_HOST=72.60.28.176
+      - REVERB_PORT=9080  # Changed from 9015 to 9080
+      - REVERB_SCHEME=http
+      
+      # Vite (if needed)
+      - VITE_REVERB_PORT=9080
+      
+      # Logging
+      - LOG_CHANNEL=stack
+      - LOG_LEVEL=debug
+      
+      # Service Role
+      - SERVICE_ROLE=app
+      
+      # Additional
+      - FILESYSTEM_DISK=local
+      - MAIL_MAILER=log
+    volumes:
+      - dms_storage:/app/storage
+      - dms_public_storage:/app/public/storage
+    networks:
+      - epos-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    depends_on:
+      - redis
+      - database
+
+  # Redis Service (Add if not already running)
+  redis:
+    image: redis:alpine
+    container_name: redis-server
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    networks:
+      - epos-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Database Service (Reference to existing - not creating new)
+  # Note: Your existing database 'epos-db-rest2' is used - this is just for reference
+  database:
+    image: mysql:8.0
+    container_name: epos-db-rest2
+    restart: always
+    environment:
+      MYSQL_DATABASE: dms
+      MYSQL_USER: eposuser
+      MYSQL_PASSWORD: epospass
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-rootpass}
+    volumes:
+      - db_data:/var/lib/mysql
+    networks:
+      - epos-net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD:-rootpass}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # Remove this service if database already exists externally
+
+  # Queue Worker
+  queue:
+    image: sohaib2naveed/vps_dms:latest
+    container_name: dms_queue_prod  # Consistent naming
+    restart: unless-stopped
+    environment:
+      # Laravel Environment
+      - APP_ENV=production
+      - APP_DEBUG=false
+      - APP_NAME=DMS
+      - APP_KEY=${APP_KEY:-base64:s1dKNm4NGL9nwnFipyP8/hBSd8jAeDlSy4VnkVTPqeU=}
+      
+      # Database
+      - DB_CONNECTION=mysql
+      - DB_HOST=epos-db-rest2
+      - DB_PORT=3306
+      - DB_DATABASE=dms
+      - DB_USERNAME=eposuser
+      - DB_PASSWORD=epospass
+      
+      # Redis
+      - REDIS_CLIENT=phpredis
+      - REDIS_HOST=redis-server
+      - REDIS_PASSWORD=null
+      - REDIS_PORT=6379
+      
+      # Queue
+      - QUEUE_CONNECTION=redis
+      - CACHE_STORE=redis
+      
+      # RabbitMQ
+      - QUEUE_CONNECTION_RABBIT=rabbitmq
+      - RABBITMQ_HOST=rabbit
+      - RABBITMQ_PORT=5672
+      - RABBITMQ_VHOST=/
+      - RABBITMQ_LOGIN=naveed
+      - RABBITMQ_PASSWORD=nido@2025@!
+      
+      # Service Role
+      - SERVICE_ROLE=queue
+    command: >
+      sh -c "
+        echo 'Waiting for services...';
+        sleep 10;
+        while true; do
+          echo 'Starting queue worker at '$(date);
+          php artisan queue:work redis --tries=3 --sleep=3 --timeout=90 --verbose;
+          echo 'Queue worker stopped, restarting in 5 seconds...';
+          sleep 5;
+        done
+      "
+    networks:
+      - epos-net
+    volumes:
+      - dms_storage:/app/storage
+    depends_on:
+      - app
+      - redis
+
+  # Reverb WebSocket Server
+  reverb:
+    image: sohaib2naveed/vps_dms:latest
+    container_name: dms_reverb_prod
+    restart: unless-stopped
+    ports:
+      - "9080:9080"  # Consistent port
+    environment:
+      # Laravel Environment
+      - APP_ENV=production
+      - APP_DEBUG=false
+      - APP_NAME=DMS
+      - APP_KEY=${APP_KEY:-base64:s1dKNm4NGL9nwnFipyP8/hBSd8jAeDlSy4VnkVTPqeU=}
+      
+      # Database
+      - DB_CONNECTION=mysql
+      - DB_HOST=epos-db-rest2
+      - DB_PORT=3306
+      - DB_DATABASE=dms
+      - DB_USERNAME=eposuser
+      - DB_PASSWORD=epospass
+      
+      # Redis
+      - REDIS_CLIENT=phpredis
+      - REDIS_HOST=redis-server
+      - REDIS_PASSWORD=null
+      - REDIS_PORT=6379
+      
+      # Reverb
+      - REVERB_APP_ID=614842
+      - REVERB_APP_KEY=rytlcwu5ftkwp7a4rxk3
+      - REVERB_APP_SECRET=muvinidosh1mnf9nu1h2
+      - REVERB_HOST=0.0.0.0  # Bind to all interfaces
+      - REVERB_PORT=9080
+      - REVERB_SCHEME=http
+      
+      # Service Role
+      - SERVICE_ROLE=reverb
+    command: php artisan reverb:start --host=0.0.0.0 --port=9080 --debug
+    networks:
+      - epos-net
+    depends_on:
+      - redis
+
+  # Scheduler for cron jobs
+  scheduler:
+    image: sohaib2naveed/vps_dms:latest
+    container_name: dms_scheduler_prod
+    restart: unless-stopped
+    environment:
+      # Laravel Environment
+      - APP_ENV=production
+      - APP_DEBUG=false
+      - APP_NAME=DMS
+      - APP_KEY=${APP_KEY:-base64:s1dKNm4NGL9nwnFipyP8/hBSd8jAeDlSy4VnkVTPqeU=}
+      
+      # Database
+      - DB_CONNECTION=mysql
+      - DB_HOST=epos-db-rest2
+      - DB_PORT=3306
+      - DB_DATABASE=dms
+      - DB_USERNAME=eposuser
+      - DB_PASSWORD=epospass
+      
+      # Redis
+      - REDIS_CLIENT=phpredis
+      - REDIS_HOST=redis-server
+      - REDIS_PASSWORD=null
+      - REDIS_PORT=6379
+      
+      - QUEUE_CONNECTION=redis
+      - CACHE_STORE=redis
+      
+      # Service Role
+      - SERVICE_ROLE=scheduler
+    command: >
+      sh -c "
+        echo 'Starting Laravel Scheduler...';
+        while true; do
+          php artisan schedule:run --verbose --no-interaction;
+          sleep 60;
+        done
+      "
+    networks:
+      - epos-net
+    depends_on:
+      - app
+      - redis
+
+networks:
+  epos-net:
+    external: true
+    name: epos-net
+
+volumes:
+  dms_storage:
+  dms_public_storage:
+  redis_data:
+  db_data:
