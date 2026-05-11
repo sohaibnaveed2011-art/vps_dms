@@ -19,7 +19,7 @@ class RoleController extends BaseApiController
      */
     protected array $permissions = [
         'index'           => 'auth.role.view',
-        'store'           => 'auth.role.create',//Szj@9881381
+        'store'           => 'auth.role.create',
         'show'            => 'auth.role.show',
         'update'          => 'auth.role.update',
         'destroy'         => 'auth.role.destroy',

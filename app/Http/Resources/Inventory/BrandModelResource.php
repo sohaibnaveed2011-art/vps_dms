@@ -3,6 +3,7 @@
 namespace App\Http\Resources\Inventory;
 
 use Illuminate\Http\Resources\Json\JsonResource;
+use App\Http\Resources\Inventory\MiniResources\BrandMiniResource;
 
 class BrandModelResource extends JsonResource
 {
@@ -10,12 +11,11 @@ class BrandModelResource extends JsonResource
     {
         return [
             'id'              => $this->id,
-            // 'organization_id' => $this->organization_id,
-            // 'brand_id'        => $this->brand_id,
             'name'            => $this->name,
             'slug'            => $this->slug,
             'series'          => $this->series,
             'is_active'       => (bool) $this->is_active,
+            'brand'           => new BrandMiniResource($this->whenLoaded('brand')),
         ];
     }
 }

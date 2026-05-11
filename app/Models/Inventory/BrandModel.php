@@ -7,6 +7,39 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
+/**
+ * @property int $id
+ * @property int $organization_id
+ * @property int $brand_id
+ * @property string $name
+ * @property string|null $series
+ * @property string|null $slug
+ * @property bool $is_active
+ * @property \Illuminate\Support\Carbon|null $created_at
+ * @property \Illuminate\Support\Carbon|null $updated_at
+ * @property \Illuminate\Support\Carbon|null $deleted_at
+ * @property-read \App\Models\Inventory\Brand $brand
+ * @property-read Organization $organization
+ * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\Inventory\Product> $products
+ * @property-read int|null $products_count
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|BrandModel newModelQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|BrandModel newQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|BrandModel onlyTrashed()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|BrandModel query()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|BrandModel whereBrandId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|BrandModel whereCreatedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|BrandModel whereDeletedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|BrandModel whereId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|BrandModel whereIsActive($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|BrandModel whereName($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|BrandModel whereOrganizationId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|BrandModel whereSeries($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|BrandModel whereSlug($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|BrandModel whereUpdatedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|BrandModel withTrashed(bool $withTrashed = true)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|BrandModel withoutTrashed()
+ * @mixin \Eloquent
+ */
 class BrandModel extends Model
 {
     use HasFactory, SoftDeletes;

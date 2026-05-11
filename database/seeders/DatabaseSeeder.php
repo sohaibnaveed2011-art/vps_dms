@@ -18,7 +18,7 @@ class DatabaseSeeder extends Seeder
 {
     public function run(): void
     {
-        $organization = Organization::get()->first();
+        $organization = Organization::first();
         
         if(!$organization){
             $this->call([

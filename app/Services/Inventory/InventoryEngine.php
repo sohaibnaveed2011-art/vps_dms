@@ -6,7 +6,7 @@ class InventoryEngine
 {
     public function __construct(
         protected OutboundStockEngine $outbound,
-        protected PurchaseStockEngine $inbound
+        protected InboundStockEngine $inbound
     ) {}
 
     public function add(array $payload): void

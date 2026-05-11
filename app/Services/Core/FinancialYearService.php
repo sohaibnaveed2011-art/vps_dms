@@ -2,14 +2,18 @@
 
 namespace App\Services\Core;
 
-use App\Exceptions\NotFoundException;
+use App\Contracts\FinancialYearInterface;
 use App\Exceptions\ConflictException;
+use App\Exceptions\NotFoundException;
 use App\Models\Core\FinancialYear;
+use App\Models\User;
+use Carbon\Carbon;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Facades\Auth;
 
-class FinancialYearService
+class FinancialYearService implements FinancialYearInterface
 {
-    public function paginate(array $filters = [], int $perPage): LengthAwarePaginator
+    public function paginate(array $filters, int $perPage): LengthAwarePaginator
     {
         return FinancialYear::query()
             // Restriction applied here via organization_id filter
@@ -76,5 +80,92 @@ class FinancialYearService
     public function forceDelete(int $id, ?int $orgId = null): void
     {
         $this->find($id, $orgId, withTrashed: true)->forceDelete();
+    }
+
+    /**
+     * Get the currently authenticated user
+     */
+    private function getAuthenticatedUser(): ?User
+    {
+        /** @var User|null $user */
+        $user = Auth::user();
+        return $user;
+    }
+
+    /**
+     * Get organization ID from authenticated user's context
+     */
+    private function getOrganizationIdFromContext(): ?int
+    {
+        $user = $this->getAuthenticatedUser();
+        
+        if (!$user) {
+            return null;
+        }
+        
+        return $user->organizationId();
+    }
+
+    /**
+     * Get active financial year for current organization context
+     */
+    public function getActiveYear(): ?FinancialYear
+    {
+        $orgId = $this->getOrganizationIdFromContext();
+        
+        if (!$orgId) {
+            return null;
+        }
+        
+        return FinancialYear::where('organization_id', $orgId)
+            ->where('is_active', true)
+            ->where('is_closed', false)
+            ->first();
+    }
+    
+    /**
+     * Get financial year that contains the given date
+     * 
+     * @param string|Carbon $date
+     */
+    public function getYearForDate($date): ?FinancialYear
+    {
+        $orgId = $this->getOrganizationIdFromContext();
+        
+        if (!$orgId) {
+            return null;
+        }
+        
+        $date = $date instanceof Carbon ? $date : Carbon::parse($date);
+        
+        return FinancialYear::where('organization_id', $orgId)
+            ->where('start_date', '<=', $date)
+            ->where('end_date', '>=', $date)
+            ->first();
+    }
+    
+    /**
+     * Check if journal can be posted to this financial year
+     */
+    public function canPostJournal(FinancialYear $year): bool
+    {
+        return $year->isOpen() && !$year->is_closed;
+    }
+    
+    /**
+     * Get current organization's financial year from active context
+     * Returns the active financial year for the user's current organization context
+     */
+    public function getCurrentOrganizationYear(): ?FinancialYear
+    {
+        $orgId = $this->getOrganizationIdFromContext();
+        
+        if (!$orgId) {
+            return null;
+        }
+        
+        return FinancialYear::where('organization_id', $orgId)
+            ->where('is_active', true)
+            ->first();
     }
 }

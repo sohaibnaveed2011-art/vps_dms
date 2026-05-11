@@ -2,13 +2,12 @@
 
 namespace App\Http\Resources\Inventory;
 
+use Illuminate\Http\Request;
 use App\Http\Resources\Core\TaxResource;
+use Illuminate\Http\Resources\Json\JsonResource;
 use App\Http\Resources\Inventory\MiniResources\BrandMiniResource;
 use App\Http\Resources\Inventory\MiniResources\CategoryMiniResource;
 use App\Http\Resources\Inventory\MiniResources\VariationMiniResource;
-use App\Http\Resources\Inventory\MiniResources\VariationValueMiniResource;
-use Illuminate\Http\Request;
-use Illuminate\Http\Resources\Json\JsonResource;
 
 class ProductResource extends JsonResource
 {
@@ -19,6 +18,7 @@ class ProductResource extends JsonResource
             'name'              => $this->name,
             'category'          => new CategoryMiniResource($this->whenLoaded('category')),
             'brand'             => new BrandMiniResource($this->whenLoaded('brand')),
+            'brand_model'       => new BrandModelResource($this->whenLoaded('brandModel')),
             'tax'               => new TaxResource($this->whenLoaded('tax')),
             'description'       => $this->description,
             'valuation_method'  => $this->valuation_method,

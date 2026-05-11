@@ -8,6 +8,40 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
+/**
+ * @property int $id
+ * @property int $organization_id
+ * @property int $product_variant_id
+ * @property string $priceable_type
+ * @property int $priceable_id
+ * @property numeric|null $cost_price
+ * @property numeric|null $sale_price
+ * @property bool $is_override
+ * @property \Illuminate\Support\Carbon|null $created_at
+ * @property \Illuminate\Support\Carbon|null $updated_at
+ * @property \Illuminate\Support\Carbon|null $deleted_at
+ * @property-read Organization $organization
+ * @property-read Model|\Eloquent $priceable
+ * @property-read \App\Models\Inventory\ProductVariant $variant
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ProductVariantPrice newModelQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ProductVariantPrice newQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ProductVariantPrice onlyTrashed()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ProductVariantPrice query()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ProductVariantPrice whereCostPrice($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ProductVariantPrice whereCreatedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ProductVariantPrice whereDeletedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ProductVariantPrice whereId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ProductVariantPrice whereIsOverride($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ProductVariantPrice whereOrganizationId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ProductVariantPrice wherePriceableId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ProductVariantPrice wherePriceableType($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ProductVariantPrice whereProductVariantId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ProductVariantPrice whereSalePrice($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ProductVariantPrice whereUpdatedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ProductVariantPrice withTrashed(bool $withTrashed = true)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ProductVariantPrice withoutTrashed()
+ * @mixin \Eloquent
+ */
 class ProductVariantPrice extends Model
 {
     use SoftDeletes;

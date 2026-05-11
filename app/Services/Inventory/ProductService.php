@@ -15,11 +15,13 @@ class ProductService
 {
     protected array $relations = [
         'category', 
-        'brand', 
+        'brand',
+        'brandModel', 
         'tax', 
         'images', // Load product images
         'variations', // load product variations (e.g., Size, Color)
         'variants', // Load the variants
+        'variants.brandModel.brand', // Load brand model for each variant
         'variants.units', // Load units for each variant
         'variants.variationValues', // Load values for each variant
         'variants.images' // Load product variant images
@@ -28,13 +30,14 @@ class ProductService
     public function __construct(protected ProductImageService $imageService)
     {}
 
-    public function paginate(array $filters = [], int $perPage): LengthAwarePaginator
+    public function paginate(?array $filters, int $perPage): LengthAwarePaginator
     {
         return Product::query()
             ->with($this->relations)
             ->when(isset($filters['organization_id']), fn($q) => $q->where('organization_id', $filters['organization_id']))
             ->when(isset($filters['category_id']), fn($q) => $q->where('category_id', $filters['category_id']))
             ->when(isset($filters['brand_id']), fn($q) => $q->where('brand_id', $filters['brand_id']))
+            ->when(isset($filters['brand_model_id']), fn($q) => $q->where('brand_model_id', $filters['brand_model_id']))
             ->when(!empty($filters['search']), function ($q) use ($filters) {
                 $term = "%" . trim($filters['search']) . "%";
                 $q->where(function ($sub) use ($term) {
@@ -114,12 +117,13 @@ class ProductService
         });
     }
 
-    protected function saveVariant(Product $product, array $variantData, $organizationId): ProductVariant
+    protected function saveVariant(Product $product, array $variantData, int $organizationId): ProductVariant
     {
         $variant = $product->variants()->updateOrCreate(
             ['id' => $variantData['id'] ?? null],
             [
                 'organization_id'   => $organizationId,
+                'brand_model_id'    => $variantData['brand_model_id'] ?? null,
                 'sku'               => $variantData['sku'],
                 'barcode'           => $variantData['barcode'] ?? null,
                 'cost_price'        => $variantData['cost_price'],

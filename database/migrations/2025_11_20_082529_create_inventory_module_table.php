@@ -102,6 +102,7 @@ return new class extends Migration
             $table->foreignId('organization_id')->constrained()->cascadeOnDelete();
             $table->foreignId('category_id')->nullable()->constrained()->nullOnDelete();
             $table->foreignId('brand_id')->nullable()->constrained()->nullOnDelete();
+            $table->foreignId('brand_model_id')->nullable()->constrained()->nullOnDelete();
             $table->foreignId('tax_id')->nullable()->constrained()->nullOnDelete();
             $table->foreignId('inventory_account_id')->nullable()->constrained('accounts')->nullOnDelete();
             $table->foreignId('sale_account_id')->nullable()->constrained('accounts')->nullOnDelete();
@@ -117,16 +118,18 @@ return new class extends Migration
             $table->softDeletes();
             $table->unique(['organization_id', 'name']);
             $table->index(['organization_id', 'category_id']);
+            $table->index(['brand_id', 'brand_model_id']);
         });
 
         Schema::create('product_variants', function (Blueprint $table) {
             $table->id();
             $table->foreignId('organization_id')->constrained()->cascadeOnDelete();
             $table->foreignId('product_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('brand_model_id')->nullable()->constrained('brand_models')->nullOnDelete();
             $table->string('sku');
             $table->string('barcode')->nullable();
-            $table->decimal('cost_price', 18, 6)->default(0); // Base Cost Price
-            $table->decimal('sale_price', 18, 6)->default(0); // Base Sale Price
+            $table->decimal('cost_price', 18, 4)->default(0); // Base Cost Price
+            $table->decimal('sale_price', 18, 4)->default(0); // Base Sale Price
             $table->boolean('is_serial_tracked')->default(false);
             $table->boolean('is_active')->default(true);
             $table->timestamps();
@@ -140,7 +143,7 @@ return new class extends Migration
             $table->id();
             $table->foreignId('product_variant_id')->constrained()->cascadeOnDelete();
             $table->foreignId('unit_id')->constrained()->cascadeOnDelete();
-            $table->decimal('conversion_factor', 18, 6);
+            $table->decimal('conversion_factor', 18, 4);
             // Example:
             // 1 Carton = 24 PCS → conversion_factor = 24
             $table->boolean('is_base')->default(false);
@@ -196,8 +199,8 @@ return new class extends Migration
             $table->foreignId('product_variant_id')->constrained()->cascadeOnDelete();
             $table->morphs('priceable');
             // Branch | Outlet | StockLocation
-            $table->decimal('cost_price', 18, 6)->nullable(); // Override Cost Price
-            $table->decimal('sale_price', 18, 6)->nullable(); // Override Sale Price at hierarchy level, higher priority than base price
+            $table->decimal('cost_price', 18, 4)->nullable(); // Override Cost Price
+            $table->decimal('sale_price', 18, 4)->nullable(); // Override Sale Price at hierarchy level, higher priority than base price
             $table->boolean('is_override')->default(false); // true if this price record is meant to override base price
             $table->timestamps();
             $table->softDeletes();
@@ -212,31 +215,53 @@ return new class extends Migration
             $table->id();
             $table->foreignId('organization_id')->constrained()->cascadeOnDelete();
             $table->foreignId('product_variant_id')->constrained()->cascadeOnDelete();
-            // Replace morphs()
+            
+            // Polymorphic scope
             $table->string('discountable_type');
             $table->unsignedBigInteger('discountable_id');
             $table->index(
                 ['discountable_type', 'discountable_id'],
                 'pv_disc_morph_index'
             );
-            $table->enum('type', ['percentage', 'fixed']);
+            
+            // =========================================================
+            // DISCOUNT APPLICATION CONTEXT
+            // =========================================================
+            $table->enum('application_type', ['sale', 'cost'])->default('sale');
+            
+            // =========================================================
+            // DISCOUNT RULES
+            // =========================================================
+            $table->enum('discount_type', ['percentage', 'fixed'])->default('percentage');
+            $table->decimal('value', 18, 4);
+            $table->decimal('max_discount_amount', 18, 4)->nullable();
             $table->unsignedInteger('priority')->default(1);
             $table->boolean('stackable')->default(false);
-            $table->decimal('max_discount_amount', 18, 6)->nullable();
-            $table->decimal('value', 18, 6); // same column will be used for discount type....
+            
+            // =========================================================
+            // VALIDITY
+            // =========================================================
             $table->date('start_date')->nullable();
             $table->date('end_date')->nullable();
             $table->boolean('is_active')->default(true);
+            
             $table->timestamps();
             $table->softDeletes();
+            
+            // =========================================================
+            // CONSTRAINTS
+            // =========================================================
             $table->unique(
-                ['product_variant_id', 'discountable_type', 'discountable_id'],
+                ['organization_id', 'product_variant_id', 'discountable_type', 'discountable_id', 'application_type'],
                 'pv_discount_unique'
             );
+            
             $table->index(
-                ['organization_id', 'product_variant_id', 'is_active'],
+                ['organization_id', 'product_variant_id', 'is_active', 'application_type'],
                 'pv_discount_index'
             );
+            
+            $table->index(['application_type', 'priority'], 'discount_app_priority_idx');
         });
 
         Schema::create('serial_numbers', function (Blueprint $table) {
@@ -319,11 +344,11 @@ return new class extends Migration
             $table->string('batch_number');
             $table->date('manufacturing_date')->nullable();
             $table->date('expiry_date')->nullable();
-            $table->decimal('initial_cost', 18, 6);
+            $table->decimal('initial_cost', 18, 4);
             $table->boolean('is_recalled')->default(false);
             $table->text('recall_reason')->nullable();
             $table->string('storage_condition')->nullable();
-            $table->decimal('mrp', 18, 6)->nullable();
+            $table->decimal('mrp', 18, 4)->nullable();
             $table->integer('warranty_months')->nullable();
             $table->enum('status', ['open', 'closed'])->default('open');
             $table->timestamps();
@@ -368,13 +393,13 @@ return new class extends Migration
             // NEW — condition support (Good / Transit / Damaged / Obsolete)
             $table->foreignId('condition_id')->constrained('inventory_conditions')->cascadeOnDelete();
             // Quantities
-            $table->decimal('quantity', 18, 6)->default(0);
-            $table->decimal('reserved_quantity', 18, 6)->default(0);
+            $table->decimal('quantity', 18, 4)->default(0);
+            $table->decimal('reserved_quantity', 18, 4)->default(0);
             // Reorder controls
-            $table->decimal('min_stock', 18, 6)->default(0);
-            $table->decimal('reorder_point', 18, 6)->default(0);
+            $table->decimal('min_stock', 18, 4)->default(0);
+            $table->decimal('reorder_point', 18, 4)->default(0);
             // Cost
-            $table->decimal('avg_cost', 18, 6)->default(0);
+            $table->decimal('avg_cost', 18, 4)->default(0);
             $table->timestamps();
             // Unique balance bucket
             $table->unique(['stock_location_id','product_variant_id','inventory_batch_id','condition_id'], 'ib_unique_bucket');
@@ -406,22 +431,23 @@ return new class extends Migration
                 'adjustment_in', 'adjustment_out', 'sales_return', 'purchase_return',
             ]);
 
-            $table->decimal('quantity_in', 18, 6)->default(0);
-            $table->decimal('quantity_out', 18, 6)->default(0);
-            $table->decimal('unit_cost', 18, 6)->default(0);
-            $table->decimal('total_cost', 18, 6)->default(0);
+            $table->decimal('quantity_in', 18, 4)->default(0);
+            $table->decimal('quantity_out', 18, 4)->default(0);
+            $table->decimal('unit_cost', 18, 4)->default(0);
+            $table->decimal('total_cost', 18, 4)->default(0);
 
             $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
             $table->timestamps();
 
-            // HIGH PERFORMANCE INDEXES
-            $table->index(['product_variant_id', 'created_at']);
-            $table->index(['stock_location_id', 'product_variant_id']);
-            $table->index(['organization_id', 'created_at']);
-            $table->index(['reference_type', 'reference_id']);
-            $table->index(['inventory_batch_id']);
-            $table->index(['organization_id','product_variant_id','stock_location_id','created_at'], 'ledger_fast_query_idx');
-
+            // HIGH PERFORMANCE INDEXES WITH SHORT NAMES
+            $table->index(['inventory_batch_id'], 'idx_ledger_batch');
+            $table->index(['organization_id', 'created_at'], 'idx_ledger_org_created');
+            $table->index(['transaction_type', 'created_at'], 'idx_ledger_type_created');
+            $table->index(['reference_type', 'reference_id'], 'idx_ledger_reference');
+            $table->index(['product_variant_id', 'created_at'], 'idx_ledger_variant_created');
+            $table->index(['stock_location_id', 'product_variant_id'], 'idx_ledger_location_variant');
+            $table->index(['product_variant_id', 'stock_location_id', 'created_at'], 'idx_ledger_variant_location_date');
+            $table->index(['organization_id', 'product_variant_id', 'stock_location_id', 'created_at'], 'idx_ledger_fast_query');
         });
 
         /*
@@ -437,7 +463,7 @@ return new class extends Migration
             $table->foreignId('product_variant_id')->constrained()->cascadeOnDelete();
             $table->foreignId('inventory_batch_id')->nullable()->constrained()->nullOnDelete();
             $table->foreignId('condition_id')->constrained('inventory_conditions');
-            $table->decimal('quantity', 18, 6);
+            $table->decimal('quantity', 18, 4);
             $table->unsignedTinyInteger('priority')->default(1);
             $table->timestamp('expires_at')->nullable();
             $table->timestamp('released_at')->nullable();
@@ -491,8 +517,8 @@ return new class extends Migration
             $table->id();
             $table->foreignId('price_list_id')->constrained()->cascadeOnDelete();
             $table->foreignId('product_variant_id')->constrained()->cascadeOnDelete();
-            $table->decimal('price', 18, 6); // Selling price for this variant in the price list
-            $table->decimal('min_quantity', 18, 6)->nullable(); // Minimum quantity for this price tier
+            $table->decimal('price', 18, 4); // Selling price for this variant in the price list
+            $table->decimal('min_quantity', 18, 4)->nullable(); // Minimum quantity for this price tier
             $table->timestamp('starts_at')->nullable(); // Optional validity period for this price tier
             $table->timestamp('ends_at')->nullable();
             $table->unsignedInteger('priority')->default(1);
@@ -513,12 +539,12 @@ return new class extends Migration
             $table->foreignId('organization_id')->constrained()->cascadeOnDelete();
             $table->string('name');
             $table->enum('type', ['percentage', 'fixed']);
-            $table->decimal('value', 18, 6);
+            $table->decimal('value', 18, 4);
             $table->date('start_date');
             $table->date('end_date');
             $table->unsignedInteger('priority')->default(1);
             $table->boolean('stackable')->default(false);
-            $table->decimal('min_order_amount', 18, 6)->nullable();
+            $table->decimal('min_order_amount', 18, 4)->nullable();
             $table->integer('usage_limit')->nullable();
             $table->integer('used_count')->default(0);
             $table->boolean('is_active')->default(true);
@@ -554,18 +580,27 @@ return new class extends Migration
         Schema::create('coupons', function (Blueprint $table) {
             $table->id();
             $table->foreignId('organization_id')->constrained()->cascadeOnDelete();
-            $table->string('code')->unique();
+            $table->string('code');
+            $table->string('name')->nullable();
+            $table->string('description')->nullable();
             $table->enum('type', ['percentage', 'fixed']);
-            $table->decimal('value', 18, 6);
-            $table->decimal('min_order_amount', 18, 6)->nullable();
+            $table->decimal('value', 18, 4);
+            $table->decimal('min_order_amount', 18, 4)->nullable();
+            $table->decimal('max_discount', 18, 4);
             $table->date('valid_from')->nullable();
             $table->date('valid_to')->nullable();
             $table->integer('usage_limit')->nullable();
+            $table->integer('usage_limit_per_customer')->nullable();
             $table->integer('used_count')->default(0);
             $table->boolean('is_active')->default(true);
             $table->timestamps();
             $table->softDeletes();
             $table->index(['organization_id', 'is_active', 'valid_from', 'valid_to']);
+            $table->index(['organization_id', 'code']);
+            $table->index(['organization_id', 'is_active']);
+            $table->index(['valid_from', 'valid_to']);
+            $table->index('used_count');
+            $table->unique(['organization_id', 'code']);
         });
 
         Schema::create('coupon_scopes', function (Blueprint $table) {
@@ -574,7 +609,7 @@ return new class extends Migration
             $table->morphs('scopeable');
             $table->timestamps();
             $table->softDeletes();
-            $table->unique(['coupon_id', 'scopeable_type', 'scopeable_id']);
+            $table->unique(['coupon_id', 'scopeable_type', 'scopeable_id'], 'coupon_scopes_unique');
         });
 
         Schema::create('coupon_targets', function (Blueprint $table) {
@@ -583,7 +618,7 @@ return new class extends Migration
             $table->morphs('targetable');
             $table->timestamps();
             $table->softDeletes();
-            $table->unique(['coupon_id', 'targetable_type', 'targetable_id']);
+            $table->unique(['coupon_id', 'targetable_type', 'targetable_id'], 'coupon_targets_unique');
         });
 
         Schema::create('customer_coupons', function (Blueprint $table) {
@@ -592,9 +627,11 @@ return new class extends Migration
             $table->foreignId('coupon_id')->constrained()->cascadeOnDelete();
             $table->boolean('is_used')->default(false);
             $table->timestamp('used_at')->nullable();
+            $table->integer('used_count')->default(0); // Track how many times this customer has used the coupon
             $table->timestamps();
             $table->softDeletes();
-            $table->unique(['customer_id', 'coupon_id']);
+            $table->unique(['customer_id', 'coupon_id'], 'customer_coupon_unique');
+            $table->index(['customer_id', 'coupon_id', 'is_used']);
         });
 
         Schema::enableForeignKeyConstraints();

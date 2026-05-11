@@ -26,6 +26,16 @@ use Illuminate\Support\Facades\Route;
 /* =========================================================
  | API VERSION v1
  ========================================================= */
+
+Route::middleware('auth:sanctum')->get('/test-auth', function () {
+    return response()->json([
+        'authenticated' => auth()->check(),
+        'user' => auth()->user(),
+    ]);
+});
+
+
+
 Route::prefix('v1')->group(function () {
 
     /* =====================================================

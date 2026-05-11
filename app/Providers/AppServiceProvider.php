@@ -2,22 +2,27 @@
 
 namespace App\Providers;
 
-use App\Models\Core\Branch;
-use App\Models\Core\Organization;
-use App\Models\Core\Outlet;
-use App\Models\Core\OutletSection;
-use App\Models\Core\Warehouse;
-use App\Models\Core\WarehouseSection;
-use App\Models\Inventory\Product;
-use App\Models\Inventory\ProductVariant;
 use App\Models\User;
+use App\Models\Core\Branch;
+use App\Models\Core\Outlet;
+use App\Models\Core\Warehouse;
+use App\Models\Inventory\Coupon;
+use App\Models\Partner\Customer;
+use App\Models\Inventory\Product;
+use App\Models\Core\Organization;
+use App\Models\Core\OutletSection;
+use App\Models\Inventory\Category;
 use App\Models\Voucher\CashRegister;
+use Illuminate\Support\Facades\Event;
+use App\Models\Core\WarehouseSection;
+use App\Models\Inventory\CouponScope;
+use App\Models\Inventory\CouponTarget;
+use Illuminate\Support\ServiceProvider;
 use App\Observers\OrganizationObserver;
+use App\Models\Inventory\ProductVariant;
 use App\Observers\OutletSectionObserver;
 use App\Observers\WarehouseSectionObserver;
 use Illuminate\Database\Eloquent\Relations\Relation;
-use Illuminate\Support\Facades\Event;
-use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -41,6 +46,11 @@ class AppServiceProvider extends ServiceProvider
         'user'              => User::class,
         'product'           => Product::class,
         'variant'           => ProductVariant::class,
+        'coupon'            => Coupon::class,
+        'coupon_scope'      => CouponScope::class,
+        'coupon_target'     => CouponTarget::class,
+        'customer'          => Customer::class,
+        'category'          => Category::class,
     ];
 
     /**

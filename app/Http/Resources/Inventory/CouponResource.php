@@ -10,7 +10,6 @@ class CouponResource extends JsonResource
     {
         return [
             'id' => $this->id,
-            'organization_id' => $this->organization_id,
             'code' => $this->code,
             'type' => $this->type,
             'value' => $this->value,
@@ -20,8 +19,6 @@ class CouponResource extends JsonResource
             'usage_limit' => $this->usage_limit,
             'used_count' => $this->used_count,
             'is_active' => $this->is_active,
-            'created_at' => $this->created_at,
-            'updated_at' => $this->updated_at,
         ];
     }
 }

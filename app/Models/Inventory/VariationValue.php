@@ -6,6 +6,34 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
+/**
+ * @property int $id
+ * @property int $organization_id
+ * @property int $variation_id
+ * @property string $value
+ * @property string|null $color_code
+ * @property \Illuminate\Support\Carbon|null $created_at
+ * @property \Illuminate\Support\Carbon|null $updated_at
+ * @property \Illuminate\Support\Carbon|null $deleted_at
+ * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\Inventory\ProductVariant> $product_variat
+ * @property-read int|null $product_variat_count
+ * @property-read \App\Models\Inventory\Variation $variation
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|VariationValue newModelQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|VariationValue newQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|VariationValue onlyTrashed()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|VariationValue query()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|VariationValue whereColorCode($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|VariationValue whereCreatedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|VariationValue whereDeletedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|VariationValue whereId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|VariationValue whereOrganizationId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|VariationValue whereUpdatedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|VariationValue whereValue($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|VariationValue whereVariationId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|VariationValue withTrashed(bool $withTrashed = true)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|VariationValue withoutTrashed()
+ * @mixin \Eloquent
+ */
 class VariationValue extends Model
 {
     use HasFactory, SoftDeletes;

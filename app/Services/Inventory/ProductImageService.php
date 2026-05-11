@@ -17,7 +17,7 @@ class ProductImageService
 
         
         if ($withTrashed) $query->withTrashed();
-        if ($orgId) $query->where('org_id', $orgId);
+        if ($orgId) $query->where('organization_id', $orgId);
 
         return $query->find($id) ?? throw new NotFoundException('Record not found.');
     }
@@ -39,7 +39,10 @@ class ProductImageService
     }
 
     /**
-     * Sync images for an existing entity (Add new, keep existing, soft-delete removed).
+     * Sync images for an existing entity (Add new, keep existing, soft-delete removed)
+     * 
+     * @param Model $model The product or variant model
+     * @param array<int, int|UploadedFile|string> $images Array of image IDs or uploaded files
      */
     public function syncImages(Model $model, $images): void
     {

@@ -18,6 +18,72 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
+/**
+ * @property int $id
+ * @property int $organization_id
+ * @property int|null $branch_id
+ * @property int|null $warehouse_id
+ * @property int|null $outlet_id
+ * @property int|null $financial_year_id
+ * @property int $customer_id
+ * @property int $voucher_type_id
+ * @property string $document_number
+ * @property \Illuminate\Support\Carbon $order_date
+ * @property \Illuminate\Support\Carbon|null $delivery_date
+ * @property numeric $grand_total
+ * @property string $status
+ * @property int|null $created_by
+ * @property int|null $reviewed_by
+ * @property int|null $approved_by
+ * @property int|null $updated_by
+ * @property \Illuminate\Support\Carbon|null $reviewed_at
+ * @property \Illuminate\Support\Carbon|null $approved_at
+ * @property \Illuminate\Support\Carbon|null $created_at
+ * @property \Illuminate\Support\Carbon|null $updated_at
+ * @property \Illuminate\Support\Carbon|null $deleted_at
+ * @property-read User|null $approver
+ * @property-read Branch|null $branch
+ * @property-read User|null $creator
+ * @property-read Customer $customer
+ * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\Voucher\DeliveryNote> $deliveryNotes
+ * @property-read int|null $delivery_notes_count
+ * @property-read User|null $editor
+ * @property-read Organization $organization
+ * @property-read Outlet|null $outlet
+ * @property-read User|null $reviewer
+ * @property-read \App\Models\Voucher\VoucherType $voucherType
+ * @property-read Warehouse|null $warehouse
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|SaleOrder newModelQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|SaleOrder newQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|SaleOrder onlyTrashed()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|SaleOrder query()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|SaleOrder visibleTo(\App\Models\User $user)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|SaleOrder whereApprovedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|SaleOrder whereApprovedBy($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|SaleOrder whereBranchId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|SaleOrder whereCreatedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|SaleOrder whereCreatedBy($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|SaleOrder whereCustomerId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|SaleOrder whereDeletedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|SaleOrder whereDeliveryDate($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|SaleOrder whereDocumentNumber($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|SaleOrder whereFinancialYearId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|SaleOrder whereGrandTotal($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|SaleOrder whereId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|SaleOrder whereOrderDate($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|SaleOrder whereOrganizationId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|SaleOrder whereOutletId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|SaleOrder whereReviewedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|SaleOrder whereReviewedBy($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|SaleOrder whereStatus($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|SaleOrder whereUpdatedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|SaleOrder whereUpdatedBy($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|SaleOrder whereVoucherTypeId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|SaleOrder whereWarehouseId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|SaleOrder withTrashed(bool $withTrashed = true)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|SaleOrder withoutTrashed()
+ * @mixin \Eloquent
+ */
 class SaleOrder extends Model implements VoucherWorkflow
 {
     use HasFactory, HasUserTimestamps, HasVoucherWorkflow, SoftDeletes;

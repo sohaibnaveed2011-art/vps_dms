@@ -2,8 +2,9 @@
 
 namespace App\Http\Requests\Inventory;
 
-use App\Http\Requests\BaseFormRequest;
 use Illuminate\Validation\Rule;
+use App\Models\Inventory\BrandModel;
+use App\Http\Requests\BaseFormRequest;
 
 class StoreProductRequest extends BaseFormRequest
 {
@@ -32,6 +33,23 @@ class StoreProductRequest extends BaseFormRequest
 
             'category_id' => ['nullable', 'integer', 'exists:categories,id'],
             'brand_id'    => ['nullable', 'integer', 'exists:brands,id'],
+            'brand_model_id' => [
+                'nullable', 
+                'integer', 
+                'exists:brand_models,id',
+                function ($attribute, $value, $fail) {
+                    // Ensure brand_model belongs to selected brand
+                    if ($this->has('brand_id') && $value) {
+                        $exists = BrandModel::where('id', $value)
+                            ->where('brand_id', $this->brand_id)
+                            ->exists();
+                        
+                        if (!$exists) {
+                            $fail('The selected brand model does not belong to the selected brand.');
+                        }
+                    }
+                }
+            ],
             'tax_id'      => ['nullable', 'integer', 'exists:taxes,id'],
             'description' => ['nullable', 'string'],
             'valuation_method' => ['required', Rule::in(['FIFO','FEFO','WAVG'])],
@@ -57,6 +75,55 @@ class StoreProductRequest extends BaseFormRequest
             'variants.*.sku' => ['required', 'string', 'max:255'],
 
             'variants.*.barcode' => ['nullable','string','max:255'],
+
+            // ADD BRAND MODEL ID FOR VARIANTS
+            'variants.*.brand_model_id' => [
+                'nullable',
+                'integer',
+                'exists:brand_models,id',
+                function ($attribute, $value, $fail) {
+                    // Extract the variant index to get brand_id if needed
+                    preg_match('/variants\.(\d+)\.brand_model_id/', $attribute, $matches);
+                    $variantIndex = $matches[1] ?? null;
+                    
+                    if ($variantIndex !== null) {
+                        // Check if variant has its own brand_id
+                        $variantBrandId = $this->input("variants.{$variantIndex}.brand_id");
+                        
+                        // If variant has explicit brand_id, use that
+                        if ($variantBrandId) {
+                            $exists = BrandModel::where('id', $value)
+                                ->where('brand_id', $variantBrandId)
+                                ->exists();
+                            
+                            if (!$exists) {
+                                $fail("The selected brand model for variant {$variantIndex} does not belong to its brand.");
+                            }
+                        } 
+                        // Otherwise, check against product's brand_id
+                        elseif ($this->has('brand_id') && $this->brand_id) {
+                            $exists = BrandModel::where('id', $value)
+                                ->where('brand_id', $this->brand_id)
+                                ->exists();
+                            
+                            if (!$exists) {
+                                $fail("The selected brand model for variant {$variantIndex} does not belong to the product's brand.");
+                            }
+                        }
+                    }
+                }
+            ],
+            
+            // OPTIONAL: Allow variants to override brand_id
+            'variants.*.brand_id' => [
+                'nullable',
+                'integer',
+                'exists:brands,id',
+                function ($attribute, $value, $fail) {
+                    // Ensure if variant changes brand, it's valid for the organization
+                    // Add any additional business logic here
+                }
+            ],
 
             'variants.*.cost_price' => ['required','numeric','min:0'],
             'variants.*.sale_price' => ['required','numeric','min:0'],
@@ -100,11 +167,47 @@ class StoreProductRequest extends BaseFormRequest
 
             'variants.*.variation_value_ids' => ['nullable', 'array'],
             'variants.*.variation_value_ids.*' => ['integer', 'exists:variation_values,id'],
+            
             /* -------------------------------------------------
              | VARIATION IMAGES
              ------------------------------------------------- */
             'variants.*.images' => 'nullable|array',
             'variants.*.images.*' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048',
+        ];
+    }
+    
+    /**
+     * Prepare the data for validation
+     */
+    protected function prepareForValidation(): void
+    {
+        // Auto-inherit brand_model_id from product if not specified at variant level
+        if ($this->has('variants') && is_array($this->variants)) {
+            $variants = $this->variants;
+            $productBrandModelId = $this->input('brand_model_id');
+            
+            foreach ($variants as $key => $variant) {
+                // If variant doesn't have brand_model_id, inherit from product
+                if (empty($variant['brand_model_id']) && $productBrandModelId) {
+                    $variants[$key]['brand_model_id'] = $productBrandModelId;
+                }
+                
+                // If variant doesn't have brand_id, inherit from product
+                if (empty($variant['brand_id']) && $this->has('brand_id')) {
+                    $variants[$key]['brand_id'] = $this->brand_id;
+                }
+            }
+            
+            $this->merge(['variants' => $variants]);
+        }
+    }
+    
+    public function messages(): array
+    {
+        return [
+            'variants.*.brand_model_id.exists' => 'Selected brand model for variant does not exist.',
+            'variants.*.brand_id.exists' => 'Selected brand for variant does not exist.',
+            // ... other messages
         ];
     }
 }

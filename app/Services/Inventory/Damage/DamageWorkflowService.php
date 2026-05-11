@@ -16,8 +16,8 @@ class DamageWorkflowService
     {
         $orgId = $payload['organization_id'];
 
-        $goodConditionId = $this->condition->getId('GOOD', $orgId);
-        $damagedConditionId = $this->condition->getId('DAMAGED', $orgId);
+        $goodConditionId = $this->condition->getIdByCode('GOOD', $orgId);
+        $damagedConditionId = $this->condition->getIdByCode('DAMAGED', $orgId);
 
         // 1️⃣ Remove from GOOD
         $this->movement->move([

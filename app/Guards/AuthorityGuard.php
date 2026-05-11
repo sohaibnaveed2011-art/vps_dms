@@ -9,6 +9,7 @@ use App\Services\Policy\AuthorityPolicyService;
 
 class AuthorityGuard
 {
+    protected array $policyCache = [];
     public function __construct(
         protected AuthorityPolicyService $policy
     ) {}
@@ -71,8 +72,24 @@ class AuthorityGuard
         */
 
         foreach ($roleIds as $roleId) {
-
-            if ($this->policy->can(
+            $cacheKey = $this->getCacheKey(
+                $context->organization_id,
+                $roleId,
+                $subject,
+                $action,
+                $voucherType,
+                $hierarchyType,
+                $hierarchyId
+            );
+            
+            if (isset($this->policyCache[$cacheKey])) {
+                if ($this->policyCache[$cacheKey]) {
+                    return;
+                }
+                continue;
+            }
+            
+            $allowed = $this->policy->can(
                 orgId: $context->organization_id,
                 roleId: $roleId,
                 subject: $subject,
@@ -80,12 +97,21 @@ class AuthorityGuard
                 voucherType: $voucherType,
                 hierarchyType: $hierarchyType,
                 hierarchyId: $hierarchyId
-            )) {
+            );
+            
+            $this->policyCache[$cacheKey] = $allowed;
+
+            if ($allowed) {
                 return;
             }
         }
 
         throw new ForbiddenException('Authority denied');
+    }
+
+    protected function getCacheKey(...$params): string
+    {
+        return md5(implode('|', $params));
     }
 
     /*
@@ -99,6 +125,10 @@ class AuthorityGuard
 
     protected function resolveHierarchy(ContextScope $target): array
     {
+        // Add support for custom hierarchy resolution
+        if (method_exists($target, 'getAuthorityHierarchy')) {
+            return $target->getAuthorityHierarchy();
+        }
         return match (true) {
             $target->outletId()    => ['outlet', $target->outletId()],
             $target->warehouseId() => ['warehouse', $target->warehouseId()],

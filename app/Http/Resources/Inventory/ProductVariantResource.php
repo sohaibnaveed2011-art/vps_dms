@@ -23,6 +23,7 @@ class ProductVariantResource extends JsonResource
             'cost_price'        => $this->cost_price,
             'sale_price'        => $this->sale_price,
             'is_active'         => $this->is_active,
+            'brand_model'       => new BrandModelResource($this->whenLoaded('brandModel')),
             'variant_images'    => ProductImageResource::collection($this->whenLoaded('images') ?? []),
              // Nested Variation (e.g., Color)
             // Nested Variation Values (e.g., Color: Red)

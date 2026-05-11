@@ -88,10 +88,11 @@ return new class extends Migration
             $table->foreignId('customer_id')->constrained('customers')->cascadeOnDelete();
             $table->foreignId('voucher_type_id')->constrained('voucher_types')->cascadeOnDelete();
             $table->char('currency_code', 3)->default('PKR');
-            $table->decimal('exchange_rate', 18, 8)->default(1);
+            $table->decimal('exchange_rate', 18, 4)->default(1);
             $table->string('document_number');
             $table->unique(['organization_id', 'branch_id', 'voucher_type_id', 'document_number'], 'idx_unique_doc_per_branch');
             $table->string('fbr_invoice_number')->nullable();
+            $table->string('fbr_pos_fee')->nullable();
             $table->date('date')->index();
             $table->decimal('sub_total', 18, 4)->default(0);
             $table->decimal('tax_total', 18, 4)->default(0);
@@ -111,10 +112,12 @@ return new class extends Migration
             $table->timestamps();
             $table->softDeletes();
 
-            $table->unique(['organization_id', 'voucher_type_id', 'document_number'], 'in_org_vt_dn_unique');
-            $table->index(['organization_id', 'customer_id'], 'inv_org_customer_idx');
-            $table->index(['organization_id', 'voucher_type_id'], 'inv_org_vt_idx');
+            // Indexes
             $table->index(['organization_id', 'status'], 'inv_org_status_idx');
+            $table->index(['organization_id', 'voucher_type_id'], 'inv_org_vt_idx');
+            $table->index(['organization_id', 'customer_id'], 'inv_org_customer_idx');
+            $table->unique(['organization_id', 'voucher_type_id', 'document_number'], 'in_org_vt_dn_unique');
+            $table->unique(['organization_id', 'document_number', 'financial_year_id'], 'unique_doc_per_year');
         });
 
         // 3. Credit Notes (Sales returns)
@@ -322,7 +325,7 @@ return new class extends Migration
             $table->decimal('cost_of_goods_sold', 18, 4)->nullable();
 
             // Financials
-            $table->decimal('quantity', 18, 6);
+            $table->decimal('quantity', 18, 4);
             $table->decimal('unit_price', 18, 4);
             $table->decimal('discount_amount', 18, 4)->default(0);
             $table->decimal('tax_rate', 8, 3)->default(0);
@@ -332,10 +335,23 @@ return new class extends Migration
 
             $table->timestamps();
 
-            // Indexes
-            // morphs() already creates an index for document_type/document_id so avoid duplicating it.
-            $table->index(['organization_id', 'product_variant_id'], 'doc_items_org_product_variant_idx');
-            $table->index('inventory_batch_id');
+            // ========== OPTIMIZED INDEXES WITH SHORT NAMES ==========
+    
+            // Single column indexes
+            $table->index('inventory_batch_id', 'idx_di_batch');
+            $table->index('product_variant_id', 'idx_di_variant');
+            $table->index('organization_id', 'idx_di_org');
+            $table->index('created_at', 'idx_di_created');
+            
+            // Composite indexes (most frequently used queries)
+            // Note: morphs() automatically creates: idx_di_document_type_document_id
+            // Then we add product_variant_id to make it covering
+            $table->index(['document_type', 'document_id', 'product_variant_id'], 'idx_di_doc_var');
+            
+            $table->index(['organization_id', 'product_variant_id'], 'idx_di_org_var');
+            
+            // For ledger/reporting queries
+            $table->index(['organization_id', 'document_type', 'created_at'], 'idx_di_org_doc_created');
         });
 
         // -----------------------------------------------------------------

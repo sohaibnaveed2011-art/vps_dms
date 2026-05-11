@@ -6,12 +6,14 @@
 use App\Http\Controllers\v1\api\Inventory\BrandController;
 use App\Http\Controllers\v1\api\Inventory\BrandModelController;
 use App\Http\Controllers\v1\api\Inventory\CategoryController;
+use App\Http\Controllers\v1\api\Inventory\CouponController;
 use App\Http\Controllers\v1\api\Inventory\InventoryBatchController;
 use App\Http\Controllers\v1\api\Inventory\PriceListController;
 use App\Http\Controllers\v1\api\Inventory\PriceListItemController;
 use App\Http\Controllers\v1\api\Inventory\ProductController;
 use App\Http\Controllers\v1\api\Inventory\ProductImageController;
 use App\Http\Controllers\v1\api\Inventory\ProductVariantPriceController;
+use App\Http\Controllers\v1\api\Inventory\PromotionController;
 use App\Http\Controllers\v1\api\Inventory\StockLocationController;
 use App\Http\Controllers\v1\api\Inventory\UnitController;
 use App\Http\Controllers\v1\api\Inventory\VariationController;
@@ -24,8 +26,8 @@ Route::middleware(['ability:inventory.*'])->group(function () {
     
     Route::apiResource('brands', BrandController::class);
     Route::apiResource('brands.models', BrandModelController::class)
-        ->parameters(['models' => 'brand_model']); // Keeps parameter naming clean
-    // Custom actions for soft-deletes (nested)
+        ->parameters(['models' => 'brand_model']);
+    
     Route::prefix('brands/{brand}/models/{brand_model}')->group(function () {
         Route::patch('restore', [BrandModelController::class, 'restore']);
         Route::delete('force', [BrandModelController::class, 'forceDelete']);
@@ -34,8 +36,8 @@ Route::middleware(['ability:inventory.*'])->group(function () {
     Route::apiResource('units', UnitController::class);
     
     Route::apiResource('variations', VariationController::class);
-    Route::apiResource('variations.values', VariationValueController::class)
-        ->parameters(['values'=> 'variation_values']);
+    Route::apiResource('variations.values', VariationValueController::class)->parameters(['values'=> 'variation_values']);
+    
     Route::prefix('variations/{variation}/values/{variation_value}')->group(function () {
         Route::patch('restore', [VariationValueController::class, 'restore']);
         Route::delete('force', [VariationValueController::class, 'forceDelete']);
@@ -52,29 +54,14 @@ Route::middleware(['ability:inventory.*'])->group(function () {
     */
 
     Route::prefix('product-variant-prices')->group(function () {
-
-        // 🔹 Bulk pricing (IMPORTANT)
         Route::post('/bulk', [ProductVariantPriceController::class, 'bulk']);
-
-        // 🔹 Standard CRUD
         Route::post('/', [ProductVariantPriceController::class, 'store']);
         Route::get('/{id}', [ProductVariantPriceController::class, 'show']);
         Route::put('/{id}', [ProductVariantPriceController::class, 'update']);
         Route::delete('/{id}', [ProductVariantPriceController::class, 'destroy']);
-
-        // 🔹 Soft delete controls
         Route::post('/{id}/restore', [ProductVariantPriceController::class, 'restore']);
         Route::delete('/{id}/force', [ProductVariantPriceController::class, 'forceDelete']);
     });
-
-    // Route::prefix('products/{product}')->group(function () {
-    //     Route::apiResource('variants', ProductVariantUnitController::class)->except(['index']);
-    //     // variants index is handled by product-variants endpoint with product_id filter
-    //     Route::delete('variants/{product_variant}/force', [ProductVariantController::class, 'forceDelete']);
-    //     Route::patch('variants/{product_variant}/restore', [ProductVariantController::class, 'restore']);
-    // });
-
-    // Route::apiResource('product-variants', ProductVariantController::class)->only(['index']);
 
     // ====================== PRODUCT | VARIANT IMAGES ======================
     Route::post('{type}/{id}/images', [ProductImageController::class, 'store'])
@@ -83,7 +70,6 @@ Route::middleware(['ability:inventory.*'])->group(function () {
     // ====================== COMMON IMAGE OPERATIONS ======================
     Route::prefix('images')->group(function () {
         Route::put('{imageId}/set-primary', [ProductImageController::class, 'setPrimary']);
-        // Route::post('{imageId}/reorder', [ProductImageController::class, 'reorder']);
         Route::delete('{imageId}', [ProductImageController::class, 'destroy']);
         Route::post('{imageId}/restore', [ProductImageController::class, 'restore']);
         Route::delete('{imageId}/force-delete', [ProductImageController::class, 'forceDelete']);
@@ -99,35 +85,63 @@ Route::middleware(['ability:inventory.*'])->group(function () {
     Route::get('inventory-batches/expired', [InventoryBatchController::class, 'getExpired']);
     Route::get('inventory-batches/expiring', [InventoryBatchController::class, 'getExpiring']);
 
-    // Route::apiResource('inventory-balances', InventoryBalanceController::class)->only(['index', 'show', 'update']);
-    // Route::apiResource('inventory-ledger', InventoryLedgerController::class)->only(['index', 'show']);
-
-    // Route::apiResource('inventory-reservations', InventoryReservationController::class);
-
-    // Route::apiResource('serial-numbers', SerialNumberController::class);
-    // Route::apiResource('product-variant-units', ProductVariantUnitController::class);
-
     // Price List
     Route::apiResource('price_lists', PriceListController::class);
     Route::apiResource('price_lists.items', PriceListItemController::class)->shallow();
 
-    // Promotions
-    // Route::apiResource('promotions', PromotionController::class);
-    // Route::post('promotion-scopes', [PromotionScopeController::class, 'store']);
-    // Route::delete('promotion-scopes/{id}', [PromotionScopeController::class, 'destroy']);
-    // Route::post('promotion-targets', [PromotionTargetController::class, 'store']);
-    // Route::delete('promotion-targets/{id}', [PromotionTargetController::class, 'destroy']);
+    /*
+    |--------------------------------------------------------------------------
+    | Coupons
+    |--------------------------------------------------------------------------
+    */
+    
+    // Custom routes for coupons (must come after apiResource to avoid conflicts)
+    Route::prefix('coupons')->group(function () {
+        // These routes don't conflict with apiResource because they're more specific
+        Route::post('validate', [CouponController::class, 'validateCoupon']);
+        Route::post('apply', [CouponController::class, 'applyCoupon']);
+        Route::get('statistics', [CouponController::class, 'statistics']);
+        Route::get('customers/{customerId}/coupons', [CouponController::class, 'customerCoupons']);
+        
+        // Custom actions for specific coupons
+        Route::prefix('{coupon}')->group(function () {
+            Route::post('duplicate', [CouponController::class, 'duplicate']);
+            Route::put('toggle-status', [CouponController::class, 'toggleStatus']);
+            Route::post('bulk-assign', [CouponController::class, 'bulkAssign']);
+            Route::post('restore', [CouponController::class, 'restore']);
+            Route::delete('force', [CouponController::class, 'forceDelete']);
+        });
+    });
+    // Option 1: Using apiResource (simpler, follows product pattern)
+    Route::apiResource('coupons', CouponController::class);
+    
 
-    // Coupons
-    // Route::apiResource('coupons', CouponController::class);
-    // Route::post('coupons/apply', [CouponController::class, 'apply']);
-    // Route::post('coupon-scopes', [CouponScopeController::class, 'store']);
-    // Route::delete('coupon-scopes/{id}', [CouponScopeController::class, 'destroy']);
-    // Route::post('coupon-targets', [CouponTargetController::class, 'store']);
-    // Route::delete('coupon-targets/{id}', [CouponTargetController::class, 'destroy']);
-    // Route::post('customer-coupons', [CustomerCouponController::class, 'store']);
+    // Promotions (placeholder for future implementation)
+    /*
+    |--------------------------------------------------------------------------
+    | Promotions
+    |--------------------------------------------------------------------------
+    */
 
-    // Simulation & Cart
-    // Route::post('pricing/simulate', [PriceSimulationController::class, 'simulate']);
-    // Route::post('cart/calculate', [CartCalculationController::class, 'calculate']);
+    Route::prefix('promotions')->group(function () {
+        // Validation & Application
+        Route::post('validate', [PromotionController::class, 'validatePromotion']);
+        Route::post('apply', [PromotionController::class, 'applyPromotion']);
+        
+        // Queries
+        Route::get('active', [PromotionController::class, 'active']);
+        Route::post('best-applicable', [PromotionController::class, 'bestApplicable']);
+        Route::get('statistics', [PromotionController::class, 'statistics']);
+        
+        // Operations on specific promotion
+        Route::prefix('{id}')->group(function () {
+            Route::post('duplicate', [PromotionController::class, 'duplicate']);
+            Route::put('toggle-status', [PromotionController::class, 'toggleStatus']);
+            Route::post('bulk-assign', [PromotionController::class, 'bulkAssign']);
+            Route::post('restore', [PromotionController::class, 'restore']);
+            Route::delete('force', [PromotionController::class, 'forceDelete']);
+        });
+        // Core CRUD (using apiResource pattern)
+    });
+    Route::apiResource('promotions', PromotionController::class)->only(['index', 'store', 'show', 'update', 'destroy']);
 });

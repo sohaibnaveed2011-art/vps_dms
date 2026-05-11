@@ -7,6 +7,34 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
+/**
+ * @property int $id
+ * @property int $organization_id
+ * @property string $name
+ * @property string $short_name
+ * @property bool $allow_decimal
+ * @property \Illuminate\Support\Carbon|null $created_at
+ * @property \Illuminate\Support\Carbon|null $updated_at
+ * @property \Illuminate\Support\Carbon|null $deleted_at
+ * @property-read Organization $organization
+ * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\Inventory\ProductVariantUnit> $productVariantUnits
+ * @property-read int|null $product_variant_units_count
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Unit newModelQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Unit newQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Unit onlyTrashed()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Unit query()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Unit whereAllowDecimal($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Unit whereCreatedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Unit whereDeletedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Unit whereId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Unit whereName($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Unit whereOrganizationId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Unit whereShortName($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Unit whereUpdatedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Unit withTrashed(bool $withTrashed = true)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Unit withoutTrashed()
+ * @mixin \Eloquent
+ */
 class Unit extends Model
 {
     use HasFactory, SoftDeletes;

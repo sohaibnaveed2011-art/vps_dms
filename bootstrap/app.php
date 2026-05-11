@@ -1,10 +1,6 @@
 <?php
 
 use App\Exceptions\ApiException;
-use App\Exceptions\ConflictException;
-use App\Exceptions\ForbiddenException;
-use App\Exceptions\NotFoundException;
-use App\Exceptions\UnauthorizedException;
 use App\Http\Middleware\ContextGuardMiddleware;
 use App\Http\Middleware\SystemAdminOnly;
 use Illuminate\Foundation\Application;
@@ -20,6 +16,7 @@ use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\QueryException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Symfony\Component\HttpKernel\Exception\MethodNotAllowedHttpException;
+
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -163,12 +160,43 @@ return Application::configure(basePath: dirname(__DIR__))
                 return null;
             }
 
+            // Helper function to determine which field caused the duplicate
+            $getFieldFromDuplicateError = function (string $message): ?string {
+                if (str_contains($message, 'coupons_code_unique')) {
+                    return 'code';
+                }
+                // Add other unique constraints as needed
+                if (str_contains($message, 'coupons_organization_id_code_unique')) {
+                    return 'code';
+                }
+                if (str_contains($message, 'customers_email_unique')) {
+                    return 'email';
+                }
+                if (str_contains($message, 'users_email_unique')) {
+                    return 'email';
+                }
+                return null;
+            };
+
             // MySQL duplicate entry error (1062)
             if (($e->errorInfo[1] ?? null) === 1062) {
-                return $apiError([
+                // Extract the duplicate value from the error message
+                preg_match("/Duplicate entry '(.*?)' for key/", $e->getMessage(), $matches);
+                $duplicateValue = $matches[1] ?? 'unknown';
+                
+                // Get the field name that caused the duplicate
+                $field = $getFieldFromDuplicateError($e->getMessage());
+                
+                $errorResponse = [
                     'message' => 'Duplicate record already exists.',
-                    'details' => 'A record with this information already exists in the system.',
-                ], 409);
+                    'details' => "The value '{$duplicateValue}' already exists in the system.",
+                ];
+                
+                if ($field) {
+                    $errorResponse['field'] = $field;
+                }
+                
+                return $apiError($errorResponse, 409);
             }
 
             // Foreign key constraint error (1451 or 1452)
@@ -191,6 +219,7 @@ return Application::configure(basePath: dirname(__DIR__))
                 500
             );
         });
+
 
         /**
          * ---------------------------------------------------------

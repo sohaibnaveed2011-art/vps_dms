@@ -10,6 +10,39 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
+/**
+ * @property int $id
+ * @property int $user_id
+ * @property int $role_id
+ * @property string $assignable_type
+ * @property int $assignable_id
+ * @property Carbon|null $started_at
+ * @property Carbon|null $ended_at
+ * @property int|null $assigned_by
+ * @property Carbon|null $created_at
+ * @property Carbon|null $updated_at
+ * @property-read Model|\Eloquent $assignable
+ * @property-read User|null $assignedBy
+ * @property-read \Spatie\Permission\Models\Role $role
+ * @property-read User $user
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|UserAssignment active()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|UserAssignment forUser(int $userId)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|UserAssignment inactive()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|UserAssignment newModelQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|UserAssignment newQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|UserAssignment query()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|UserAssignment whereAssignableId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|UserAssignment whereAssignableType($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|UserAssignment whereAssignedBy($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|UserAssignment whereCreatedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|UserAssignment whereEndedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|UserAssignment whereId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|UserAssignment whereRoleId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|UserAssignment whereStartedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|UserAssignment whereUpdatedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|UserAssignment whereUserId($value)
+ * @mixin \Eloquent
+ */
 class UserAssignment extends Model
 {
     use HasFactory;

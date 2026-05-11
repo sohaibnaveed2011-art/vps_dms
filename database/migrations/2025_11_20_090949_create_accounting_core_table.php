@@ -30,21 +30,23 @@ return new class extends Migration
             $table->text('description')->nullable();
             $table->unsignedInteger('level')->default(0);
             $table->string('currency_code', 3)->default('PKR');
-            $table->decimal('opening_balance', 18, 6)->default(0);
+            $table->decimal('opening_balance', 18, 4)->default(0);
             $table->date('opening_balance_date')->nullable();
+            $table->decimal('current_balance', 18, 4)->default(0);
             $table->boolean('is_taxable')->default(false);
             $table->boolean('automatic_postings_disabled')->default(false);
 
             $table->enum('type', ['Asset', 'Liability', 'Equity', 'Revenue', 'Expense']);
             $table->enum('normal_balance', ['Debit', 'Credit'])->nullable();
-
             $table->boolean('is_group')->default(false);
             $table->boolean('is_active')->default(true);
+            $table->timestamp('last_posted_at')->nullable();
             $table->timestamps();
             $table->softDeletes();
 
             $table->unique(['organization_id', 'code']);
             $table->index(['organization_id', 'type']);
+            $table->index(['organization_id', 'normal_balance', 'is_active']);
         });
 
         /*
@@ -102,8 +104,8 @@ return new class extends Migration
             $table->foreignId('warehouse_id')->nullable()->constrained()->nullOnDelete();
             $table->foreignId('outlet_id')->nullable()->constrained()->nullOnDelete();
 
-            $table->decimal('debit', 18, 6)->default(0);
-            $table->decimal('credit', 18, 6)->default(0);
+            $table->decimal('debit', 18, 4)->default(0);
+            $table->decimal('credit', 18, 4)->default(0);
 
             $table->text('line_memo')->nullable();
             
@@ -114,11 +116,11 @@ return new class extends Migration
             $table->softDeletes();
 
             $table->index(['account_id']);
+            $table->index(['journal_id']);
             $table->index(['journal_id', 'account_id']);
+            $table->index(['account_id', 'created_at']);
             $table->index(['account_id', 'debit', 'credit']);
             $table->index(['branch_id', 'warehouse_id', 'outlet_id']);
-            $table->index(['account_id', 'created_at']);
-            $table->index(['journal_id']);
         });
 
         /*

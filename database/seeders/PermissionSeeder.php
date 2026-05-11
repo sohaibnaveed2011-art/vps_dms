@@ -88,6 +88,9 @@ class PermissionSeeder extends Seeder
             ...$this->crud('inventory', 'product'), 
             ...$this->crud('inventory', 'stockTransaction'),
             ...$this->crud('inventory', 'priceList'),
+            ...$this->crud('inventory', 'coupon'),
+            ...$this->crud('inventory', 'promotion'),
+
 
             /* ======================
              | ACCOUNT

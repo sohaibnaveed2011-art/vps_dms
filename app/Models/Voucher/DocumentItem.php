@@ -11,6 +11,48 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 
+/**
+ * @property int $id
+ * @property int $organization_id
+ * @property string $document_type
+ * @property int $document_id
+ * @property int $product_variant_id
+ * @property int|null $tax_id
+ * @property int|null $inventory_batch_id
+ * @property numeric|null $cost_of_goods_sold
+ * @property numeric $quantity
+ * @property numeric $unit_price
+ * @property numeric $discount_amount
+ * @property numeric $tax_rate
+ * @property numeric $line_total
+ * @property string|null $notes
+ * @property \Illuminate\Support\Carbon|null $created_at
+ * @property \Illuminate\Support\Carbon|null $updated_at
+ * @property-read Model|\Eloquent $document
+ * @property-read ProductVariant|null $item
+ * @property-read Organization $organization
+ * @property-read Tax|null $tax
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|DocumentItem newModelQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|DocumentItem newQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|DocumentItem query()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|DocumentItem whereCostOfGoodsSold($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|DocumentItem whereCreatedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|DocumentItem whereDiscountAmount($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|DocumentItem whereDocumentId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|DocumentItem whereDocumentType($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|DocumentItem whereId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|DocumentItem whereInventoryBatchId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|DocumentItem whereLineTotal($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|DocumentItem whereNotes($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|DocumentItem whereOrganizationId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|DocumentItem whereProductVariantId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|DocumentItem whereQuantity($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|DocumentItem whereTaxId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|DocumentItem whereTaxRate($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|DocumentItem whereUnitPrice($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|DocumentItem whereUpdatedAt($value)
+ * @mixin \Eloquent
+ */
 class DocumentItem extends Model
 {
     use HasFactory;

@@ -2,24 +2,91 @@
 
 namespace App\Models\Accounts;
 
-use App\Events\Accounts\JournalPosted;
+use Exception;
+use Carbon\Carbon;
+use App\Models\User;
 use App\Models\Core\Branch;
-use App\Models\Core\FinancialYear;
-use App\Models\Core\Organization;
 use App\Models\Core\Outlet;
 use App\Models\Core\Warehouse;
-use App\Models\User;
-use Carbon\Carbon;
-use Exception;
-use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Relations\MorphTo;
-use Illuminate\Database\Eloquent\SoftDeletes;
+use App\Models\Core\Organization;
 use Illuminate\Support\Facades\DB;
+use App\Models\Core\FinancialYear;
+use App\Events\Accounts\JournalPosted;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Database\Eloquent\Relations\MorphTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 
+/**
+ * @property int $id
+ * @property int $organization_id
+ * @property int $financial_year_id
+ * @property int|null $branch_id
+ * @property int|null $warehouse_id
+ * @property int|null $outlet_id
+ * @property string $voucher_no
+ * @property string|null $document_number
+ * @property \Illuminate\Support\Carbon $date
+ * @property string $reference_type
+ * @property int $reference_id
+ * @property bool $is_posted
+ * @property bool $is_reversed
+ * @property string|null $memo
+ * @property int|null $created_by
+ * @property \Illuminate\Support\Carbon|null $created_at
+ * @property \Illuminate\Support\Carbon|null $updated_at
+ * @property \Illuminate\Support\Carbon|null $deleted_at
+ * @property-read Branch|null $branch
+ * @property-read User|null $createdBy
+ * @property-read FinancialYear $financialYear
+ * @property-read int $line_count
+ * @property-read string $status
+ * @property-read string $status_color
+ * @property-read float $total_credit
+ * @property-read float $total_debit
+ * @property-read string $voucher_number_formatted
+ * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\Accounts\JournalLine> $lines
+ * @property-read int|null $lines_count
+ * @property-read Organization $organization
+ * @property-read Outlet|null $outlet
+ * @property-read Model|\Eloquent $reference
+ * @property-read Warehouse|null $warehouse
+ * @method static Builder<static>|Journal forFinancialYear(int $financialYearId)
+ * @method static Builder<static>|Journal forOrganization(int $organizationId)
+ * @method static Builder<static>|Journal inDateRange(string $from, string $to)
+ * @method static Builder<static>|Journal newModelQuery()
+ * @method static Builder<static>|Journal newQuery()
+ * @method static Builder<static>|Journal notReversed()
+ * @method static Builder<static>|Journal ofVoucherType(string $referenceType)
+ * @method static Builder<static>|Journal onlyTrashed()
+ * @method static Builder<static>|Journal posted()
+ * @method static Builder<static>|Journal query()
+ * @method static Builder<static>|Journal unposted()
+ * @method static Builder<static>|Journal whereBranchId($value)
+ * @method static Builder<static>|Journal whereCreatedAt($value)
+ * @method static Builder<static>|Journal whereCreatedBy($value)
+ * @method static Builder<static>|Journal whereDate($value)
+ * @method static Builder<static>|Journal whereDeletedAt($value)
+ * @method static Builder<static>|Journal whereDocumentNumber($value)
+ * @method static Builder<static>|Journal whereFinancialYearId($value)
+ * @method static Builder<static>|Journal whereId($value)
+ * @method static Builder<static>|Journal whereIsPosted($value)
+ * @method static Builder<static>|Journal whereIsReversed($value)
+ * @method static Builder<static>|Journal whereMemo($value)
+ * @method static Builder<static>|Journal whereOrganizationId($value)
+ * @method static Builder<static>|Journal whereOutletId($value)
+ * @method static Builder<static>|Journal whereReferenceId($value)
+ * @method static Builder<static>|Journal whereReferenceType($value)
+ * @method static Builder<static>|Journal whereUpdatedAt($value)
+ * @method static Builder<static>|Journal whereVoucherNo($value)
+ * @method static Builder<static>|Journal whereWarehouseId($value)
+ * @method static Builder<static>|Journal withTrashed(bool $withTrashed = true)
+ * @method static Builder<static>|Journal withoutTrashed()
+ * @mixin \Eloquent
+ */
 class Journal extends Model
 {
     use SoftDeletes, HasFactory;

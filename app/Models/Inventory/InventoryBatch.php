@@ -6,6 +6,50 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
+/**
+ * @property int $id
+ * @property int $product_variant_id
+ * @property string $batch_number
+ * @property \Illuminate\Support\Carbon|null $manufacturing_date
+ * @property \Illuminate\Support\Carbon|null $expiry_date
+ * @property numeric $initial_cost
+ * @property bool $is_recalled
+ * @property string|null $recall_reason
+ * @property string|null $storage_condition
+ * @property numeric|null $mrp
+ * @property int|null $warranty_months
+ * @property string $status
+ * @property \Illuminate\Support\Carbon|null $created_at
+ * @property \Illuminate\Support\Carbon|null $updated_at
+ * @property \Illuminate\Support\Carbon|null $deleted_at
+ * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\Inventory\InventoryBalance> $balances
+ * @property-read int|null $balances_count
+ * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\Inventory\InventoryLedger> $ledger
+ * @property-read int|null $ledger_count
+ * @property-read \App\Models\Inventory\ProductVariant $productVariant
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|InventoryBatch newModelQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|InventoryBatch newQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|InventoryBatch onlyTrashed()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|InventoryBatch query()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|InventoryBatch whereBatchNumber($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|InventoryBatch whereCreatedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|InventoryBatch whereDeletedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|InventoryBatch whereExpiryDate($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|InventoryBatch whereId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|InventoryBatch whereInitialCost($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|InventoryBatch whereIsRecalled($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|InventoryBatch whereManufacturingDate($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|InventoryBatch whereMrp($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|InventoryBatch whereProductVariantId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|InventoryBatch whereRecallReason($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|InventoryBatch whereStatus($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|InventoryBatch whereStorageCondition($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|InventoryBatch whereUpdatedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|InventoryBatch whereWarrantyMonths($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|InventoryBatch withTrashed(bool $withTrashed = true)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|InventoryBatch withoutTrashed()
+ * @mixin \Eloquent
+ */
 class InventoryBatch extends Model
 {
     use HasFactory, SoftDeletes;

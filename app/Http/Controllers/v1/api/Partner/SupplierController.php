@@ -39,7 +39,7 @@ class SupplierController extends BaseApiController
         $suppliers = $this->service->paginate($filters, $this->perPage($request));
         
         return $this->success(
-            SupplierResource::collection($suppliers->items()),
+            SupplierResource::collection($suppliers),
             $this->paginationMetadata($suppliers)
         );
     }

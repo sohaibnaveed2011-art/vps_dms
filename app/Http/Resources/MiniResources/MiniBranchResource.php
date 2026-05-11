@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources\MiniResources;
 
+use App\Http\Resources\Inventory\BrandModelResource;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 class MiniBranchResource extends JsonResource
@@ -11,6 +12,7 @@ class MiniBranchResource extends JsonResource
         return [
             'id' => $this->id,
             'name' => $this->name,
+            'models'=> BrandModelResource::collection($this->whenLoaded('models')),
         ];
     }
 }

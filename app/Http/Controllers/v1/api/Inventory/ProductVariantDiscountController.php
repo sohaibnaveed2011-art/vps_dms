@@ -2,12 +2,12 @@
 
 namespace App\Http\Controllers\v1\api\Inventory;
 
+use Illuminate\Http\Request;
+use Illuminate\Http\JsonResponse;
+use App\Services\Inventory\ProductVariantDiscountService;
 use App\Http\Controllers\v1\api\BaseApiController;
 use App\Http\Requests\Inventory\BulkProductVariantDiscountRequest;
 use App\Http\Requests\Inventory\UpdateProductVariantDiscountRequest;
-use App\Services\Inventory\ProductVariantDiscountService;
-use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 
 class ProductVariantDiscountController extends BaseApiController
 {
@@ -34,7 +34,6 @@ class ProductVariantDiscountController extends BaseApiController
      */
     public function store(BulkProductVariantDiscountRequest $request): JsonResponse
     {
-        dd($request->validated());
         $this->authorizeAction($request);
         $this->enforcePolicy($request, 'inventory');
 

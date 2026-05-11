@@ -11,6 +11,37 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
+/**
+ * @property int $id
+ * @property int $organization_id
+ * @property string $name
+ * @property string $type
+ * @property bool $is_active
+ * @property \Illuminate\Support\Carbon|null $created_at
+ * @property \Illuminate\Support\Carbon|null $updated_at
+ * @property \Illuminate\Support\Carbon|null $deleted_at
+ * @property-read \Illuminate\Database\Eloquent\Collection<int, Customer> $customers
+ * @property-read int|null $customers_count
+ * @property-read Organization $organization
+ * @property-read \Illuminate\Database\Eloquent\Collection<int, Supplier> $suppliers
+ * @property-read int|null $suppliers_count
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|PartnerCategory active()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|PartnerCategory newModelQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|PartnerCategory newQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|PartnerCategory onlyTrashed()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|PartnerCategory query()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|PartnerCategory whereCreatedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|PartnerCategory whereDeletedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|PartnerCategory whereId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|PartnerCategory whereIsActive($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|PartnerCategory whereName($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|PartnerCategory whereOrganizationId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|PartnerCategory whereType($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|PartnerCategory whereUpdatedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|PartnerCategory withTrashed(bool $withTrashed = true)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|PartnerCategory withoutTrashed()
+ * @mixin \Eloquent
+ */
 class PartnerCategory extends Model
 {
     use HasFactory, SoftDeletes;

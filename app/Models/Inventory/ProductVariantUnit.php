@@ -7,6 +7,36 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use InvalidArgumentException;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 
+/**
+ * @property int $id
+ * @property int $product_variant_id
+ * @property int $unit_id
+ * @property numeric $conversion_factor
+ * @property bool $is_base
+ * @property bool $is_purchase_unit
+ * @property bool $is_sale_unit
+ * @property bool $is_active
+ * @property \Illuminate\Support\Carbon|null $created_at
+ * @property \Illuminate\Support\Carbon|null $updated_at
+ * @property string|null $deleted_at
+ * @property-read \App\Models\Inventory\ProductVariant $productVariant
+ * @property-read \App\Models\Inventory\Unit $unit
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ProductVariantUnit newModelQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ProductVariantUnit newQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ProductVariantUnit query()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ProductVariantUnit whereConversionFactor($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ProductVariantUnit whereCreatedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ProductVariantUnit whereDeletedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ProductVariantUnit whereId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ProductVariantUnit whereIsActive($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ProductVariantUnit whereIsBase($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ProductVariantUnit whereIsPurchaseUnit($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ProductVariantUnit whereIsSaleUnit($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ProductVariantUnit whereProductVariantId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ProductVariantUnit whereUnitId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|ProductVariantUnit whereUpdatedAt($value)
+ * @mixin \Eloquent
+ */
 class ProductVariantUnit extends Model
 {
     protected $fillable = [

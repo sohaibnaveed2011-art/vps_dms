@@ -14,6 +14,42 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
+/**
+ * @property int $id
+ * @property int $user_id
+ * @property int $organization_id
+ * @property int|null $branch_id
+ * @property int|null $warehouse_id
+ * @property int|null $outlet_id
+ * @property int|null $cash_register_id
+ * @property Carbon $started_at
+ * @property Carbon|null $ended_at
+ * @property Carbon|null $created_at
+ * @property Carbon|null $updated_at
+ * @property-read Branch|null $branch
+ * @property-read CashRegister|null $cashRegister
+ * @property-read Organization $organization
+ * @property-read Outlet|null $outlet
+ * @property-read User $user
+ * @property-read Warehouse|null $warehouse
+ * @method static Builder<static>|UserContext active()
+ * @method static Builder<static>|UserContext inactive()
+ * @method static Builder<static>|UserContext newModelQuery()
+ * @method static Builder<static>|UserContext newQuery()
+ * @method static Builder<static>|UserContext query()
+ * @method static Builder<static>|UserContext whereBranchId($value)
+ * @method static Builder<static>|UserContext whereCashRegisterId($value)
+ * @method static Builder<static>|UserContext whereCreatedAt($value)
+ * @method static Builder<static>|UserContext whereEndedAt($value)
+ * @method static Builder<static>|UserContext whereId($value)
+ * @method static Builder<static>|UserContext whereOrganizationId($value)
+ * @method static Builder<static>|UserContext whereOutletId($value)
+ * @method static Builder<static>|UserContext whereStartedAt($value)
+ * @method static Builder<static>|UserContext whereUpdatedAt($value)
+ * @method static Builder<static>|UserContext whereUserId($value)
+ * @method static Builder<static>|UserContext whereWarehouseId($value)
+ * @mixin \Eloquent
+ */
 class UserContext extends Model
 {
     use HasFactory;

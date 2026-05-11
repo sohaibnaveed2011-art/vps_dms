@@ -19,7 +19,7 @@ class SupplierService
                 $q->where(function ($sub) use ($term) {
                     $sub->where('name', 'like', $term)
                         ->orWhere('email', 'like', $term)
-                        ->orWhere('phone', 'like', $term);
+                        ->orWhere('contact_no', 'like', $term);
                 });
             })
             ->latest()

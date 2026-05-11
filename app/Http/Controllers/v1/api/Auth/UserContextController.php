@@ -13,7 +13,7 @@ class UserContextController extends BaseApiController
     protected array $permissions = [
         'index' => 'user.context.view',
         'show'  => 'user.context.show',
-        'available' => 'user.context,show',
+        'available' => 'user.context.show',
     ];
 
     public function index(Request $request)

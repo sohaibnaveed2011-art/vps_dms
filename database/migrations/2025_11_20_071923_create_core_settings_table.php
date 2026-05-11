@@ -53,6 +53,31 @@ return new class extends Migration
             $table->date('end_date');
             $table->boolean('is_active')->default(true);
             $table->boolean('is_closed')->default(false);
+            
+            // Add accounting-specific fields
+            $table->enum('period_type', ['monthly', 'quarterly', 'yearly'])->default('yearly');
+            $table->unsignedSmallInteger('period_number')->nullable(); // 1-12 for monthly, 1-4 for quarterly
+            $table->foreignId('parent_period_id')->nullable()->constrained('financial_years')->nullOnDelete();
+            $table->enum('status', ['draft', 'open', 'closing', 'closed', 'archived'])->default('open');
+            
+            // Closing tracking
+            $table->foreignId('closed_by')->nullable()->constrained('users')->nullOnDelete();
+            $table->timestamp('closed_at')->nullable();
+            $table->foreignId('approved_by')->nullable()->constrained('users')->nullOnDelete();
+            $table->timestamp('approved_at')->nullable();
+            
+            // Opening balance tracking
+            $table->decimal('opening_balance_total', 18, 4)->default(0);
+            $table->boolean('opening_balances_posted')->default(false);
+            
+            // Audit
+            $table->text('closure_notes')->nullable();
+            $table->json('closure_summary')->nullable();
+            
+            // Indexes
+            $table->index(['organization_id', 'status', 'start_date']);
+            $table->index(['organization_id', 'parent_period_id']);
+            
             $table->timestamps();
             $table->softDeletes();
             $table->unique(['organization_id','name']);

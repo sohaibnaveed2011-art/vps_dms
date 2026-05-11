@@ -2,9 +2,10 @@
 
 namespace App\Http\Requests\Inventory;
 
-use App\Models\Inventory\Product;
-use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use App\Models\Inventory\Product;
+use App\Models\Inventory\BrandModel;
+use Illuminate\Foundation\Http\FormRequest;
 
 class UpdateProductRequest extends FormRequest
 {
@@ -33,20 +34,39 @@ class UpdateProductRequest extends FormRequest
                     ->ignore($productId, 'id'),
             ],
 
-            'category_id'      => ['nullable', 'integer', 'exists:categories,id'],
-            'brand_id'         => ['nullable', 'integer', 'exists:brands,id'],
-            'tax_id'           => ['nullable', 'integer', 'exists:taxes,id'],
-            'description'      => ['nullable', 'string'],
+            'category_id' => ['nullable', 'integer', 'exists:categories,id'],
+            'brand_id' => ['nullable', 'integer', 'exists:brands,id'],
+            
+            'brand_model_id' => [
+                'nullable',
+                'integer',
+                'exists:brand_models,id',
+                function ($attribute, $value, $fail) {
+                    // Only validate relationship if both brand_id and brand_model_id are provided
+                    if ($this->has('brand_id') && $this->brand_id && $value) {
+                        $exists = BrandModel::where('id', $value)
+                            ->where('brand_id', $this->brand_id)
+                            ->exists();
+                        
+                        if (!$exists) {
+                            $fail('The selected brand model does not belong to the selected brand.');
+                        }
+                    }
+                }
+            ],
+            
+            'tax_id' => ['nullable', 'integer', 'exists:taxes,id'],
+            'description' => ['nullable', 'string'],
             'valuation_method' => ['sometimes', 'required', Rule::in(['FIFO', 'FEFO', 'WAVG'])],
-            'has_warranty'     => ['boolean'],
-            'warranty_months'  => ['nullable', 'integer', 'min:1'],
-            'has_variants'     => ['boolean'],
-            'is_active'        => ['boolean'],
+            'has_warranty' => ['boolean'],
+            'warranty_months' => ['nullable', 'integer', 'min:1'],
+            'has_variants' => ['boolean'],
+            'is_active' => ['boolean'],
             
             /* -------------------------------------------------
                 | PRODUCT VARIATIONS (Pivot Table Relations)
                 ------------------------------------------------- */
-            'variation_ids'   => ['required_if:has_variants,true', 'array'],
+            'variation_ids' => ['required_if:has_variants,true', 'array'],
             'variation_ids.*' => ['integer', 'exists:variations,id'],
             
             /* -------------------------------------------------
@@ -54,23 +74,44 @@ class UpdateProductRequest extends FormRequest
                 ------------------------------------------------- */
             'variants' => ['sometimes', 'required', 'array', 'min:1'],
             
-            // Crucial: ID check for existing variants during update
             'variants.*.id' => ['nullable', 'integer', 'exists:product_variants,id'],
-
-            'variants.*.sku' => [
-                'required', 
-                'string', 
-                'max:255',
-                // Note: Unique SKU validation per organization usually happens here too
+            'variants.*.sku' => ['required', 'string', 'max:255'],
+            'variants.*.barcode' => ['nullable', 'string', 'max:255'],
+            
+            // Variant brand model (independent from product)
+            'variants.*.brand_model_id' => [
+                'nullable',
+                'integer',
+                'exists:brand_models,id',
+                function ($attribute, $value, $fail) {
+                    // Extract variant index
+                    preg_match('/variants\.(\d+)\.brand_model_id/', $attribute, $matches);
+                    $variantIndex = $matches[1] ?? null;
+                    
+                    if ($variantIndex !== null && $value) {
+                        // Check if variant has its own brand_id
+                        $variantBrandId = $this->input("variants.{$variantIndex}.brand_id");
+                        
+                        if ($variantBrandId) {
+                            $exists = BrandModel::where('id', $value)
+                                ->where('brand_id', $variantBrandId)
+                                ->exists();
+                            
+                            if (!$exists) {
+                                $fail("The selected brand model does not belong to the variant's brand.");
+                            }
+                        }
+                    }
+                }
             ],
-            'variants.*.barcode'           => ['nullable', 'string', 'max:255'],
-            'variants.*.cost_price'        => ['required', 'numeric', 'min:0'],
-            'variants.*.sale_price'        => ['required', 'numeric', 'min:0'],
+            
+            'variants.*.cost_price' => ['required', 'numeric', 'min:0'],
+            'variants.*.sale_price' => ['required', 'numeric', 'min:0'],
             'variants.*.is_serial_tracked' => ['boolean'],
-            'variants.*.is_active'         => ['boolean'],
+            'variants.*.is_active' => ['boolean'],
 
             /* -------------------------------------------------
-                | UNITS (With logic to prevent 12 becoming 1)
+                | UNITS
                 ------------------------------------------------- */
             'variants.*.units' => [
                 'required', 
@@ -84,13 +125,13 @@ class UpdateProductRequest extends FormRequest
                 }
             ],
 
+            'variants.*.units.*.id' => ['nullable', 'integer', 'exists:variant_units,id'],
             'variants.*.units.*.unit_id' => ['required', 'integer', 'exists:units,id'],
             
             'variants.*.units.*.conversion_factor' => [
                 'required',
                 'numeric',
                 function ($attribute, $value, $fail) {
-                    // Extract the base status of the current unit
                     $isBasePath = str_replace('conversion_factor', 'is_base', $attribute);
                     $isBase = request()->input($isBasePath);
 
@@ -104,15 +145,21 @@ class UpdateProductRequest extends FormRequest
                 },
             ],
 
-            'variants.*.units.*.is_base'          => ['boolean'],
+            'variants.*.units.*.is_base' => ['boolean'],
             'variants.*.units.*.is_purchase_unit' => ['boolean'],
-            'variants.*.units.*.is_sale_unit'     => ['boolean'],
+            'variants.*.units.*.is_sale_unit' => ['boolean'],
 
             /* -------------------------------------------------
-                | VARIATION VALUES (Pivot for Variant Values)
+                | VARIATION VALUES
                 ------------------------------------------------- */
-            'variants.*.variation_value_ids'   => ['nullable', 'array'],
+            'variants.*.variation_value_ids' => ['nullable', 'array'],
             'variants.*.variation_value_ids.*' => ['integer', 'exists:variation_values,id'],
-            ];
+            
+            /* -------------------------------------------------
+                | VARIANT IMAGES
+                ------------------------------------------------- */
+            'variants.*.images' => 'nullable|array',
+            'variants.*.images.*' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048',
+        ];
     }
 }
