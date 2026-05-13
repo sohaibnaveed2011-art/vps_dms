@@ -2,44 +2,16 @@
 
 namespace App\Models\Voucher;
 
-use App\Models\Core\Branch;
-use App\Models\Core\Organization;
 use App\Models\User;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
+use App\Models\Core\Branch;
+use App\Models\Vouchers\Invoice;
+use App\Models\Core\Organization;
+use App\Models\Voucher\CashRegister;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 
-/**
- * @property int $id
- * @property int $organization_id
- * @property int $cash_register_id
- * @property int|null $user_id
- * @property \Illuminate\Support\Carbon $started_at
- * @property \Illuminate\Support\Carbon|null $ended_at
- * @property int $is_open
- * @property \Illuminate\Support\Carbon|null $created_at
- * @property \Illuminate\Support\Carbon|null $updated_at
- * @property-read Branch|null $branch
- * @property-read \App\Models\Voucher\CashRegister $cashRegister
- * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\Voucher\Invoice> $invoices
- * @property-read int|null $invoices_count
- * @property-read Organization $organization
- * @property-read User|null $user
- * @method static \Illuminate\Database\Eloquent\Builder<static>|PosSession newModelQuery()
- * @method static \Illuminate\Database\Eloquent\Builder<static>|PosSession newQuery()
- * @method static \Illuminate\Database\Eloquent\Builder<static>|PosSession query()
- * @method static \Illuminate\Database\Eloquent\Builder<static>|PosSession whereCashRegisterId($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|PosSession whereCreatedAt($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|PosSession whereEndedAt($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|PosSession whereId($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|PosSession whereIsOpen($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|PosSession whereOrganizationId($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|PosSession whereStartedAt($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|PosSession whereUpdatedAt($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|PosSession whereUserId($value)
- * @mixin \Eloquent
- */
 class PosSession extends Model
 {
     use HasFactory;

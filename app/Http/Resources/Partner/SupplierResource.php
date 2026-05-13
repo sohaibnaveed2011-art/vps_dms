@@ -11,7 +11,6 @@ class SupplierResource extends JsonResource
     {
         return [
             'id' => $this->id,
-            'supplier_category' => $this->whenLoaded(MiniPartnerCategoryResource::class),
             'name' => $this->name,
             'cnic' => $this->cnic,
             'ntn' => $this->ntn,
@@ -26,6 +25,7 @@ class SupplierResource extends JsonResource
             'payment_terms_days' => (int) $this->payment_terms_days,
             'current_balance' => (float) $this->current_balance,
             'is_active' => (bool) $this->is_active,
+            'partner_category' => new MiniPartnerCategoryResource($this->whenLoaded('category')),
         ];
     }
 }

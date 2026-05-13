@@ -74,7 +74,7 @@ class BranchController extends BaseApiController
 
         $this->authorizeAction($request, $branch);
 
-        return $this->success(new BranchResource($branch));
+        return $this->success(new BranchResource($branch->load('organization')));
     }
 
     /**

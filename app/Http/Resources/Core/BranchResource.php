@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources\Core;
 
+use App\Http\Resources\MiniResources\MiniOrganizationResource;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 class BranchResource extends JsonResource
@@ -32,6 +33,7 @@ class BranchResource extends JsonResource
             'pos_id'           => $this->pos_id,
             'pos_auth_token'   => $this->pos_auth_token ? (string) $this->pos_auth_token : null,
             'is_active'        => (bool) $this->is_active,
+            'organization'     => new MiniOrganizationResource($this->whenLoaded('organization')),
         ];
     }
 }

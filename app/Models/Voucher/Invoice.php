@@ -1,113 +1,50 @@
 <?php
 
-namespace App\Models\Voucher;
+namespace App\Models\Vouchers;
 
 use App\Models\Core\Branch;
+use App\Models\Voucher\PosSession;
+use App\Models\Accounts\Journal;
 use App\Models\Partner\Customer;
-use App\Traits\HasUserTimestamps;
-use App\Models\Core\Organization;
-use Illuminate\Database\Eloquent\Model;
-// use App\Models\Account\ReceiptAllocation;
-use Illuminate\Database\Eloquent\SoftDeletes;
-use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Relations\MorphMany;
+use App\Models\Vouchers\CreditNote;
+use App\Models\Vouchers\BaseVoucher;
+use App\Models\Vouchers\VoucherType;
+use App\Models\Vouchers\ReceiptReference;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 
-/**
- * @property int $id
- * @property int $organization_id
- * @property int|null $branch_id
- * @property int|null $pos_session_id
- * @property int $customer_id
- * @property int $voucher_type_id
- * @property string $currency_code
- * @property numeric $exchange_rate
- * @property string $document_number
- * @property string|null $fbr_invoice_number
- * @property string|null $fbr_pos_fee
- * @property \Illuminate\Support\Carbon $date
- * @property numeric $sub_total
- * @property numeric $tax_total
- * @property numeric $paid_amount
- * @property numeric $due_amount
- * @property numeric $grand_total
- * @property string $status
- * @property int $financial_year_id
- * @property int|null $journal_id
- * @property int|null $created_by
- * @property int|null $reviewed_by
- * @property int|null $approved_by
- * @property int|null $updated_by
- * @property string|null $reviewed_at
- * @property string|null $approved_at
- * @property \Illuminate\Support\Carbon|null $created_at
- * @property \Illuminate\Support\Carbon|null $updated_at
- * @property \Illuminate\Support\Carbon|null $deleted_at
- * @property-read \App\Models\User|null $approver
- * @property-read Branch|null $branch
- * @property-read \App\Models\User|null $creator
- * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\Voucher\CreditNote> $creditNotes
- * @property-read int|null $credit_notes_count
- * @property-read Customer $customer
- * @property-read \App\Models\User|null $editor
- * @property-read Organization $organization
- * @property-read \App\Models\Voucher\PosSession|null $posSession
- * @property-read \App\Models\User|null $reviewer
- * @property-read \App\Models\Voucher\VoucherType $voucherType
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Invoice newModelQuery()
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Invoice newQuery()
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Invoice onlyTrashed()
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Invoice query()
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Invoice whereApprovedAt($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Invoice whereApprovedBy($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Invoice whereBranchId($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Invoice whereCreatedAt($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Invoice whereCreatedBy($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Invoice whereCurrencyCode($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Invoice whereCustomerId($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Invoice whereDate($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Invoice whereDeletedAt($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Invoice whereDocumentNumber($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Invoice whereDueAmount($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Invoice whereExchangeRate($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Invoice whereFbrInvoiceNumber($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Invoice whereFbrPosFee($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Invoice whereFinancialYearId($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Invoice whereGrandTotal($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Invoice whereId($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Invoice whereJournalId($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Invoice whereOrganizationId($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Invoice wherePaidAmount($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Invoice wherePosSessionId($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Invoice whereReviewedAt($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Invoice whereReviewedBy($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Invoice whereStatus($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Invoice whereSubTotal($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Invoice whereTaxTotal($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Invoice whereUpdatedAt($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Invoice whereUpdatedBy($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Invoice whereVoucherTypeId($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Invoice withTrashed(bool $withTrashed = true)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Invoice withoutTrashed()
- * @mixin \Eloquent
- */
-class Invoice extends Model
+class Invoice extends BaseVoucher
 {
-    use HasFactory, HasUserTimestamps, SoftDeletes;
+    protected $table = 'invoices';
 
     protected $fillable = [
         'organization_id',
-        'branch_id', // Nullable in schema for optional hierarchy
+        'branch_id',
         'pos_session_id',
         'customer_id',
         'voucher_type_id',
+        'currency_code',
+        'exchange_rate',
         'document_number',
         'fbr_invoice_number',
         'fbr_pos_fee',
         'date',
+        'sub_total',
+        'tax_total',
+        'paid_amount',
+        'due_amount',
+        'allocated_amount',
         'grand_total',
         'status',
+        'financial_year_id',
+        'journal_id',
+        'submitted_at',
+        'rejected_at',
+        'rejected_by',
+        'rejection_reason',
+        'rejection_details',
+        'approval_attempts',
+        'resubmitted_at',
+        'fully_allocated_at',
         'created_by',
         'reviewed_by',
         'approved_by',
@@ -117,14 +54,20 @@ class Invoice extends Model
     ];
 
     protected $casts = [
-        'grand_total' => 'decimal:4',
         'date' => 'date',
+        'exchange_rate' => 'float',
+        'sub_total' => 'float',
+        'tax_total' => 'float',
+        'paid_amount' => 'float',
+        'due_amount' => 'float',
+        'allocated_amount' => 'float',
+        'grand_total' => 'float',
+        'fully_allocated_at' => 'datetime',
     ];
 
-    public function organization(): BelongsTo
-    {
-        return $this->belongsTo(Organization::class);
-    }
+    /* ======================
+     |  Relationships
+     ====================== */
 
     public function branch(): BelongsTo
     {
@@ -146,19 +89,88 @@ class Invoice extends Model
         return $this->belongsTo(VoucherType::class);
     }
 
-    // FINANCIAL & INVENTORY LINKS
-    public function items(): MorphMany // Line items on the invoice
+    public function journal(): BelongsTo
     {
-        return $this->morphMany(DocumentItem::class, 'document');
+        return $this->belongsTo(Journal::class);
     }
 
-    // public function allocations(): HasMany // How much of the invoice is covered by receipts
-    // {
-    //     return $this->hasMany(ReceiptAllocation::class);
-    // }
-
-    public function creditNotes(): HasMany // Returns issued against this invoice
+    public function creditNotes()
     {
         return $this->hasMany(CreditNote::class);
+    }
+
+    public function receiptReferences()
+    {
+        return $this->morphMany(ReceiptReference::class, 'reference');
+    }
+
+    /* ======================
+     |  Business Logic
+     ====================== */
+
+/**
+ * Update the paid amount, due amount, and status based on receipt allocations
+ * 
+ * @return self
+ */
+public function updatePaidAmount(): self
+{
+    // Calculate total paid from receipt references
+    $totalPaid = $this->receiptReferences()
+        ->whereHas('receipt', function ($query) {
+            $query->where('status', 'posted');
+        })
+        ->sum('amount');
+    
+    // Update payment amounts
+    $this->paid_amount = round((float) $totalPaid, 4);
+    $this->allocated_amount = $this->paid_amount;
+    
+    // Calculate due amount with precision
+    $grandTotal = (float) $this->grand_total;
+    $paidAmount = (float) $this->paid_amount;
+    $dueAmount = $grandTotal - $paidAmount;
+    
+    // Store with 4 decimal precision (round returns float)
+    $this->due_amount = round($dueAmount, 4);
+    
+    // Update status based on payment status
+    $this->updateStatusFromPayment();
+    
+    // Save without triggering events
+    $this->saveQuietly();
+    
+    return $this;
+}
+
+/**
+ * Update invoice status based on payment amount
+ */
+protected function updateStatusFromPayment(): void
+{
+    $tolerance = 0.0001; // Tolerance for floating point comparison
+    $isFullyPaid = abs((float) $this->due_amount) <= $tolerance;
+    
+    if ($this->status === 'cancelled') {
+        return;
+    }
+    
+    if ($isFullyPaid && $this->status !== 'paid') {
+        $this->status = 'paid';
+        $this->fully_allocated_at = \Carbon\Carbon::now();
+    } elseif (!$isFullyPaid && $this->due_amount > 0 && $this->status === 'paid') {
+        $this->status = 'posted';
+        $this->fully_allocated_at = null;
+    }
+}
+
+    public function getBalanceAttribute(): float
+    {
+        return $this->grand_total - $this->paid_amount;
+    }
+
+    public function isFullyPaid(): bool
+    {
+        return $this->balance <= 0;
     }
 }

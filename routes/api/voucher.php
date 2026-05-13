@@ -13,17 +13,24 @@ use App\Http\Controllers\v1\api\Voucher\SaleOrderController;
 Route::middleware(['ability:vouchers.*'])->group(function () {
     // Sale Order Routes
     Route::prefix('sale-orders')->group(function () {
+        // Workflow routes
+        Route::post('/{id}/submit', [SaleOrderController::class, 'submit']);
+        Route::post('/{id}/review', [SaleOrderController::class, 'review']);
+        Route::post('/{id}/approve', [SaleOrderController::class, 'approve']);
+        Route::post('/{id}/reject', [SaleOrderController::class, 'reject']);
+        Route::post('/{id}/confirm', [SaleOrderController::class, 'confirm']);
+        Route::post('/{id}/cancel', [SaleOrderController::class, 'cancel']);
+        
+        // Admin routes
+        Route::post('/{id}/restore', [SaleOrderController::class, 'restore']);
+        Route::delete('/{id}/force', [SaleOrderController::class, 'forceDelete']);
+        
         Route::get('/', [SaleOrderController::class, 'index']);
         Route::post('/', [SaleOrderController::class, 'store']);
-        Route::get('{id}', [SaleOrderController::class, 'show']);
-        Route::put('{id}', [SaleOrderController::class, 'update']);
-        Route::delete('{id}', [SaleOrderController::class, 'destroy']);
-        Route::post('{id}/restore', [SaleOrderController::class, 'restore']);
-        Route::delete('{id}/force', [SaleOrderController::class, 'forceDelete']);
-        Route::post('{id}/review', [SaleOrderController::class, 'review']);
-        Route::post('{id}/approve', [SaleOrderController::class, 'approve']);
-        Route::post('{id}/allocate', [SaleOrderController::class, 'allocate']);
-        Route::post('{id}/fulfill', [SaleOrderController::class, 'fulfill']);
+        Route::get('/{id}', [SaleOrderController::class, 'show']);
+        Route::put('/{id}', [SaleOrderController::class, 'update']);
+        Route::delete('/{id}', [SaleOrderController::class, 'destroy']);
+        
     });
     // Invoice Routes
     Route::prefix('invoices')->group(function () {

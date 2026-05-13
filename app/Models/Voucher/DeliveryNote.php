@@ -1,82 +1,36 @@
 <?php
 
-namespace App\Models\Voucher;
+namespace App\Models\Vouchers;
 
 use App\Models\User;
+use App\Models\Vouchers\Invoice;
 use App\Models\Core\Organization;
-use App\Models\Inventory\StockTransaction;
-use App\Traits\HasUserTimestamps;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Model;
+use App\Models\Vouchers\SaleOrder;
+use App\Models\Vouchers\VoucherType;
+use App\Models\Vouchers\BaseVoucher;
+use Illuminate\Contracts\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\MorphMany;
-use Illuminate\Database\Eloquent\SoftDeletes;
 
-/**
- * @property int $id
- * @property int $organization_id
- * @property int|null $sale_order_id
- * @property int|null $invoice_id
- * @property int $voucher_type_id
- * @property string $document_number
- * @property \Illuminate\Support\Carbon $date
- * @property int|null $rider_id
- * @property string $status
- * @property int|null $created_by
- * @property int|null $reviewed_by
- * @property int|null $approved_by
- * @property int|null $updated_by
- * @property string|null $reviewed_at
- * @property string|null $approved_at
- * @property \Illuminate\Support\Carbon|null $created_at
- * @property \Illuminate\Support\Carbon|null $updated_at
- * @property \Illuminate\Support\Carbon|null $deleted_at
- * @property-read User|null $approver
- * @property-read User|null $creator
- * @property-read User|null $editor
- * @property-read \App\Models\Voucher\Invoice|null $invoice
- * @property-read Organization $organization
- * @property-read User|null $reviewer
- * @property-read User|null $rider
- * @property-read \App\Models\Voucher\SaleOrder|null $saleOrder
- * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliveryNote newModelQuery()
- * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliveryNote newQuery()
- * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliveryNote onlyTrashed()
- * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliveryNote query()
- * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliveryNote whereApprovedAt($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliveryNote whereApprovedBy($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliveryNote whereCreatedAt($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliveryNote whereCreatedBy($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliveryNote whereDate($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliveryNote whereDeletedAt($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliveryNote whereDocumentNumber($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliveryNote whereId($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliveryNote whereInvoiceId($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliveryNote whereOrganizationId($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliveryNote whereReviewedAt($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliveryNote whereReviewedBy($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliveryNote whereRiderId($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliveryNote whereSaleOrderId($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliveryNote whereStatus($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliveryNote whereUpdatedAt($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliveryNote whereUpdatedBy($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliveryNote whereVoucherTypeId($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliveryNote withTrashed(bool $withTrashed = true)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|DeliveryNote withoutTrashed()
- * @mixin \Eloquent
- */
-class DeliveryNote extends Model
+class DeliveryNote extends BaseVoucher
 {
-    use HasFactory, SoftDeletes, HasUserTimestamps;
+    protected $table = 'delivery_notes';
 
     protected $fillable = [
         'organization_id',
         'sale_order_id',
         'invoice_id',
+        'voucher_type_id',
         'document_number',
         'date',
         'rider_id',
         'status',
+        'submitted_at',
+        'rejected_at',
+        'rejected_by',
+        'rejection_reason',
+        'rejection_details',
+        'approval_attempts',
+        'resubmitted_at',
         'created_by',
         'reviewed_by',
         'approved_by',
@@ -89,22 +43,167 @@ class DeliveryNote extends Model
         'date' => 'date',
     ];
 
-    // Relationships
-    public function organization(): BelongsTo { return $this->belongsTo(Organization::class); }
-    public function saleOrder(): BelongsTo { return $this->belongsTo(SaleOrder::class); }
-    public function invoice(): BelongsTo { return $this->belongsTo(Invoice::class); }
+    /* ======================
+     |  Relationships
+     ====================== */
 
-    public function rider(): BelongsTo { return $this->belongsTo(User::class, 'rider_id'); }
-    public function items(): MorphMany
+    public function organization(): BelongsTo
     {
-        return $this->morphMany(DocumentItem::class, 'document');
+        return $this->belongsTo(Organization::class);
+    }
+
+    public function saleOrder(): BelongsTo
+    {
+        return $this->belongsTo(SaleOrder::class, 'sale_order_id');
+    }
+
+    public function invoice(): BelongsTo
+    {
+        return $this->belongsTo(Invoice::class, 'invoice_id');
+    }
+
+    public function voucherType(): BelongsTo
+    {
+        return $this->belongsTo(VoucherType::class);
+    }
+
+    public function rider(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'rider_id');
+    }
+
+    /* ======================
+     |  Business Logic
+     ====================== */
+
+    /**
+     * Mark delivery as picked up
+     */
+    public function markPicked(?int $userId = null): self
+    {
+        $this->status = 'picked';
+        $this->save();
+
+        $this->changeStatus('picked', 'Order picked up by rider');
+
+        return $this;
     }
 
     /**
-     * Get the stock transactions (inventory OUT) confirmed by this Delivery Note.
+     * Mark delivery as in transit
      */
-    public function stockTransactions(): MorphMany
+    public function markInTransit(?int $userId = null): self
     {
-        return $this->morphMany(StockTransaction::class, 'reference');
+        $this->status = 'in_transit';
+        $this->save();
+
+        $this->changeStatus('in_transit', 'Order is out for delivery');
+
+        return $this;
+    }
+
+    /**
+     * Mark delivery as delivered
+     */
+    public function markDelivered(?int $userId = null): self
+    {
+        $this->status = 'delivered';
+        $this->save();
+
+        $this->changeStatus('delivered', 'Order delivered successfully');
+
+        // If linked to invoice, could trigger invoice status update
+        if ($this->invoice_id) {
+            // Optionally update invoice status or create receipt
+            event(new \App\Events\DeliveryCompleted($this));
+        }
+
+        return $this;
+    }
+
+    /**
+     * Cancel delivery
+     */
+    public function cancel(string $reason, ?int $userId = null): self
+    {
+        $this->status = 'cancelled';
+        $this->rejection_reason = $reason;
+        $this->rejected_by = $userId ?? auth()->id();
+        $this->rejected_at = \Carbon\Carbon::now();
+        $this->save();
+
+        $this->changeStatus('cancelled', $reason);
+
+        return $this;
+    }
+
+    /**
+     * Check if delivery can be assigned to rider
+     */
+    public function canAssignRider(): bool
+    {
+        return in_array($this->status, ['draft', 'picked']) && is_null($this->rider_id);
+    }
+
+    /**
+     * Check if delivery is in progress
+     */
+    public function isInProgress(): bool
+    {
+        return in_array($this->status, ['picked', 'in_transit']);
+    }
+
+    /**
+     * Check if delivery is completed
+     */
+    public function isCompleted(): bool
+    {
+        return $this->status === 'delivered';
+    }
+
+    /* ======================
+     |  Scopes
+     ====================== */
+
+    public function scopePendingDelivery(Builder $query)
+    {
+        return $query->whereIn('status', ['draft', 'picked', 'in_transit']);
+    }
+
+    public function scopeByRider(Builder $query, int $riderId)
+    {
+        return $query->where('rider_id', $riderId);
+    }
+
+    public function scopeDeliveredBetween(Builder $query, string $startDate, string $endDate)
+    {
+        return $query->where('status', 'delivered')
+            ->whereBetween('date', [$startDate, $endDate]);
+    }
+
+    /* ======================
+     |  Accessors
+     ====================== */
+
+    public function getRiderNameAttribute(): ?string
+    {
+        return $this->rider?->name;
+    }
+
+    public function getIsDeliveredAttribute(): bool
+    {
+        return $this->status === 'delivered';
+    }
+
+    public function getDeliveryDurationAttribute(): ?string
+    {
+        if (!$this->isCompleted()) {
+            return null;
+        }
+
+        $createdAt = $this->created_at;
+        $deliveredAt = $this->updated_at; // Assuming delivered status update time
+
+        return $createdAt->diffForHumans($deliveredAt, true);
     }
 }

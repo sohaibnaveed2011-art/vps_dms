@@ -1,84 +1,38 @@
 <?php
 
-namespace App\Models\Voucher;
+namespace App\Models\Vouchers;
 
-use App\Models\Account\GlTransaction;
-use App\Models\Core\Organization;
-use App\Models\Inventory\StockTransaction;
+use App\Models\Accounts\Journal;
 use App\Models\Partner\Customer;
-use App\Traits\HasUserTimestamps;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Model;
+use App\Models\Vouchers\Invoice;
+use App\Models\Core\Organization;
+use App\Models\Vouchers\VoucherType;
+use App\Models\Vouchers\BaseVoucher;
+use Illuminate\Contracts\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\MorphMany;
-use Illuminate\Database\Eloquent\SoftDeletes;
 
-/**
- * @property int $id
- * @property int $organization_id
- * @property int|null $invoice_id
- * @property int $customer_id
- * @property int $voucher_type_id
- * @property string $document_number
- * @property \Illuminate\Support\Carbon $date
- * @property numeric $grand_total
- * @property int $financial_year_id
- * @property int|null $journal_id
- * @property int|null $created_by
- * @property int|null $reviewed_by
- * @property int|null $approved_by
- * @property int|null $updated_by
- * @property string|null $reviewed_at
- * @property string|null $approved_at
- * @property \Illuminate\Support\Carbon|null $created_at
- * @property \Illuminate\Support\Carbon|null $updated_at
- * @property \Illuminate\Support\Carbon|null $deleted_at
- * @property-read \App\Models\User|null $approver
- * @property-read \App\Models\User|null $creator
- * @property-read Customer $customer
- * @property-read \App\Models\User|null $editor
- * @property-read \App\Models\Voucher\Invoice|null $invoice
- * @property-read Organization $organization
- * @property-read \App\Models\User|null $reviewer
- * @method static \Illuminate\Database\Eloquent\Builder<static>|CreditNote newModelQuery()
- * @method static \Illuminate\Database\Eloquent\Builder<static>|CreditNote newQuery()
- * @method static \Illuminate\Database\Eloquent\Builder<static>|CreditNote onlyTrashed()
- * @method static \Illuminate\Database\Eloquent\Builder<static>|CreditNote query()
- * @method static \Illuminate\Database\Eloquent\Builder<static>|CreditNote whereApprovedAt($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|CreditNote whereApprovedBy($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|CreditNote whereCreatedAt($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|CreditNote whereCreatedBy($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|CreditNote whereCustomerId($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|CreditNote whereDate($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|CreditNote whereDeletedAt($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|CreditNote whereDocumentNumber($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|CreditNote whereFinancialYearId($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|CreditNote whereGrandTotal($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|CreditNote whereId($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|CreditNote whereInvoiceId($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|CreditNote whereJournalId($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|CreditNote whereOrganizationId($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|CreditNote whereReviewedAt($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|CreditNote whereReviewedBy($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|CreditNote whereUpdatedAt($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|CreditNote whereUpdatedBy($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|CreditNote whereVoucherTypeId($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|CreditNote withTrashed(bool $withTrashed = true)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|CreditNote withoutTrashed()
- * @mixin \Eloquent
- */
-class CreditNote extends Model
+class CreditNote extends BaseVoucher
 {
-    use HasFactory, SoftDeletes, HasUserTimestamps;
+    protected $table = 'credit_notes';
 
     protected $fillable = [
         'organization_id',
         'invoice_id',
         'customer_id',
+        'voucher_type_id',
         'document_number',
-        'organization_id',
         'date',
         'grand_total',
+        'status',
+        'financial_year_id',
+        'journal_id',
+        'submitted_at',
+        'rejected_at',
+        'rejected_by',
+        'rejection_reason',
+        'rejection_details',
+        'approval_attempts',
+        'resubmitted_at',
         'created_by',
         'reviewed_by',
         'approved_by',
@@ -92,7 +46,10 @@ class CreditNote extends Model
         'grand_total' => 'decimal:4',
     ];
 
-    // Relationships
+    /* ======================
+     |  Relationships
+     ====================== */
+
     public function organization(): BelongsTo
     {
         return $this->belongsTo(Organization::class);
@@ -100,7 +57,7 @@ class CreditNote extends Model
 
     public function invoice(): BelongsTo
     {
-        return $this->belongsTo(Invoice::class);
+        return $this->belongsTo(Invoice::class, 'invoice_id');
     }
 
     public function customer(): BelongsTo
@@ -108,24 +65,142 @@ class CreditNote extends Model
         return $this->belongsTo(Customer::class);
     }
 
-    public function items(): MorphMany
+    public function voucherType(): BelongsTo
     {
-        return $this->morphMany(DocumentItem::class, 'document');
+        return $this->belongsTo(VoucherType::class);
+    }
+
+    public function journal(): BelongsTo
+    {
+        return $this->belongsTo(Journal::class);
+    }
+
+    /* ======================
+     |  Business Logic
+     ====================== */
+
+    /**
+     * Post the credit note (create journal entries)
+     */
+    public function post(?int $userId = null): self
+    {
+        if ($this->status !== 'approved') {
+            throw new \Exception('Credit note must be approved before posting');
+        }
+
+        if ($this->journal_id) {
+            throw new \Exception('Credit note already posted');
+        }
+
+        // Create journal entry logic here
+        // $this->journal_id = $journal->id;
+
+        $this->status = 'posted';
+        $this->markApproved($userId);
+        $this->save();
+
+        $this->changeStatus('posted', 'Credit note posted to accounting');
+
+        // Update linked invoice
+        if ($this->invoice_id) {
+            $this->invoice->updatePaidAmount();
+        }
+
+        return $this;
     }
 
     /**
-     * Get the GL entries posted as a result of this Credit Note.
+     * Cancel the credit note
      */
-    public function glTransactions(): MorphMany
+    public function cancel(string $reason, ?int $userId = null): self
     {
-        return $this->morphMany(GlTransaction::class, 'reference');
+        if ($this->status === 'posted') {
+            throw new \Exception('Posted credit note cannot be cancelled. Create a reversing entry instead.');
+        }
+
+        $this->status = 'cancelled';
+        $this->rejection_reason = $reason;
+        $this->rejected_by = $userId ?? auth()->id();
+        $this->rejected_at = \Carbon\Carbon::now();
+        $this->save();
+
+        $this->changeStatus('cancelled', $reason);
+
+        return $this;
     }
 
     /**
-     * Get the stock transactions (inventory IN) posted as a result of this return.
+     * Calculate if credit note exceeds original invoice amount
      */
-    public function stockTransactions(): MorphMany
+    public function wouldExceedInvoiceAmount(): bool
     {
-        return $this->morphMany(StockTransaction::class, 'reference');
+        if (!$this->invoice_id) {
+            return false;
+        }
+
+        $totalCredits = CreditNote::where('invoice_id', $this->invoice_id)
+            ->where('status', '!=', 'cancelled')
+            ->where('id', '!=', $this->id)
+            ->sum('grand_total');
+
+        $newTotal = $totalCredits + $this->grand_total;
+
+        return $newTotal > $this->invoice->grand_total;
+    }
+
+    /**
+     * Get the remaining credit available on the invoice
+     */
+    public function getRemainingCredit(): float
+    {
+        if (!$this->invoice_id) {
+            return 0;
+        }
+
+        $usedCredits = CreditNote::where('invoice_id', $this->invoice_id)
+            ->where('status', '!=', 'cancelled')
+            ->sum('grand_total');
+
+        return $this->invoice->grand_total - $usedCredits;
+    }
+
+    /**
+     * Validate before saving
+     */
+    protected static function booted()
+    {
+        static::creating(function ($creditNote) {
+            if ($creditNote->wouldExceedInvoiceAmount()) {
+                throw new \Exception('Credit note total exceeds the original invoice amount');
+            }
+        });
+    }
+
+    /* ======================
+     |  Scopes
+     ====================== */
+
+    public function scopeForInvoice(Builder $query, int $invoiceId)
+    {
+        return $query->where('invoice_id', $invoiceId);
+    }
+
+    public function scopeUnposted(Builder $query)
+    {
+        return $query->whereNull('journal_id')->where('status', 'approved');
+    }
+
+    /* ======================
+     |  Accessors
+     ====================== */
+
+    public function getIsLinkedToInvoiceAttribute(): bool
+    {
+        return !is_null($this->invoice_id);
+    }
+
+    public function getRemainingCreditAttribute(): float
+    {
+        return $this->getRemainingCredit();
     }
 }

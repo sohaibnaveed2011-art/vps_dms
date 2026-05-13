@@ -60,9 +60,8 @@ class CustomerController extends BaseApiController
         $customer = $this->service->find($id, $this->getActiveOrgId($request));
         $this->authorizeAction($request, $customer);
 
-        return $this->success(new CustomerResource($customer));
+        return $this->success(new CustomerResource($customer->load('category')));
     }
-
     public function update(UpdateCustomerRequest $request, int $id): JsonResponse
     {
         $customer = $this->service->find($id, $this->getActiveOrgId($request));

@@ -11,7 +11,7 @@ class BranchService
     /**
      * Fetch paginated branches with filtering and tenant isolation.
      */
-    public function paginate(array $filters = [], int $perPage): LengthAwarePaginator
+    public function paginate(array $filters, int $perPage): LengthAwarePaginator
     {
         $query = Branch::query();
 

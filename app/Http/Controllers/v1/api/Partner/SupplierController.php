@@ -59,7 +59,7 @@ class SupplierController extends BaseApiController
 
         $this->authorizeAction($request, $supplier);
 
-        return $this->success(new SupplierResource($supplier));
+        return $this->success(new SupplierResource($supplier->load('category')));
     }
 
     public function update(UpdateSupplierRequest $request, int $id): JsonResponse

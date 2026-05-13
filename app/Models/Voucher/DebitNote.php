@@ -1,83 +1,38 @@
 <?php
 
-namespace App\Models\Voucher;
+namespace App\Models\Vouchers;
 
-use App\Models\Account\GlTransaction;
-use App\Models\Core\Organization;
-use App\Models\Inventory\StockTransaction;
+use App\Models\Accounts\Journal;
 use App\Models\Partner\Supplier;
-use App\Traits\HasUserTimestamps;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Model;
+use App\Models\Core\Organization;
+use App\Models\Vouchers\VoucherType;
+use App\Models\Vouchers\BaseVoucher;
+use App\Models\Vouchers\PurchaseBill;
+use Illuminate\Contracts\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\MorphMany;
-use Illuminate\Database\Eloquent\SoftDeletes;
 
-/**
- * @property int $id
- * @property int $organization_id
- * @property int|null $purchase_bill_id
- * @property int $supplier_id
- * @property int $voucher_type_id
- * @property string $document_number
- * @property \Illuminate\Support\Carbon $date
- * @property numeric $grand_total
- * @property int $financial_year_id
- * @property int|null $journal_id
- * @property int|null $created_by
- * @property int|null $reviewed_by
- * @property int|null $approved_by
- * @property int|null $updated_by
- * @property string|null $reviewed_at
- * @property string|null $approved_at
- * @property \Illuminate\Support\Carbon|null $created_at
- * @property \Illuminate\Support\Carbon|null $updated_at
- * @property \Illuminate\Support\Carbon|null $deleted_at
- * @property-read \App\Models\User|null $approver
- * @property-read \App\Models\User|null $creator
- * @property-read \App\Models\User|null $editor
- * @property-read Organization $organization
- * @property-read \App\Models\Voucher\PurchaseBill|null $purchaseBill
- * @property-read \App\Models\User|null $reviewer
- * @property-read Supplier $supplier
- * @method static \Illuminate\Database\Eloquent\Builder<static>|DebitNote newModelQuery()
- * @method static \Illuminate\Database\Eloquent\Builder<static>|DebitNote newQuery()
- * @method static \Illuminate\Database\Eloquent\Builder<static>|DebitNote onlyTrashed()
- * @method static \Illuminate\Database\Eloquent\Builder<static>|DebitNote query()
- * @method static \Illuminate\Database\Eloquent\Builder<static>|DebitNote whereApprovedAt($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|DebitNote whereApprovedBy($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|DebitNote whereCreatedAt($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|DebitNote whereCreatedBy($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|DebitNote whereDate($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|DebitNote whereDeletedAt($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|DebitNote whereDocumentNumber($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|DebitNote whereFinancialYearId($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|DebitNote whereGrandTotal($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|DebitNote whereId($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|DebitNote whereJournalId($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|DebitNote whereOrganizationId($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|DebitNote wherePurchaseBillId($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|DebitNote whereReviewedAt($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|DebitNote whereReviewedBy($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|DebitNote whereSupplierId($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|DebitNote whereUpdatedAt($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|DebitNote whereUpdatedBy($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|DebitNote whereVoucherTypeId($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|DebitNote withTrashed(bool $withTrashed = true)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|DebitNote withoutTrashed()
- * @mixin \Eloquent
- */
-class DebitNote extends Model
+class DebitNote extends BaseVoucher
 {
-    use HasFactory, HasUserTimestamps, SoftDeletes;
+    protected $table = 'debit_notes';
 
     protected $fillable = [
         'organization_id',
         'purchase_bill_id',
         'supplier_id',
+        'voucher_type_id',
         'document_number',
         'date',
         'grand_total',
+        'status',
+        'financial_year_id',
+        'journal_id',
+        'submitted_at',
+        'rejected_at',
+        'rejected_by',
+        'rejection_reason',
+        'rejection_details',
+        'approval_attempts',
+        'resubmitted_at',
         'created_by',
         'reviewed_by',
         'approved_by',
@@ -91,7 +46,10 @@ class DebitNote extends Model
         'grand_total' => 'decimal:4',
     ];
 
-    // Relationships
+    /* ======================
+     |  Relationships
+     ====================== */
+
     public function organization(): BelongsTo
     {
         return $this->belongsTo(Organization::class);
@@ -99,7 +57,7 @@ class DebitNote extends Model
 
     public function purchaseBill(): BelongsTo
     {
-        return $this->belongsTo(PurchaseBill::class);
+        return $this->belongsTo(PurchaseBill::class, 'purchase_bill_id');
     }
 
     public function supplier(): BelongsTo
@@ -107,24 +65,129 @@ class DebitNote extends Model
         return $this->belongsTo(Supplier::class);
     }
 
-    public function items(): MorphMany
+    public function voucherType(): BelongsTo
     {
-        return $this->morphMany(DocumentItem::class, 'document');
+        return $this->belongsTo(VoucherType::class);
+    }
+
+    public function journal(): BelongsTo
+    {
+        return $this->belongsTo(Journal::class);
+    }
+
+    /* ======================
+     |  Business Logic
+     ====================== */
+
+    /**
+     * Post the debit note (create journal entries)
+     */
+    public function post(?int $userId = null): self
+    {
+        if ($this->status !== 'approved') {
+            throw new \Exception('Debit note must be approved before posting');
+        }
+
+        if ($this->journal_id) {
+            throw new \Exception('Debit note already posted');
+        }
+
+        // Create journal entry logic here
+        // $this->journal_id = $journal->id;
+
+        $this->status = 'posted';
+        $this->markApproved($userId);
+        $this->save();
+
+        $this->changeStatus('posted', 'Debit note posted to accounting');
+
+        // Update linked purchase bill
+        if ($this->purchase_bill_id) {
+            $this->purchaseBill->updatePaidAmount();
+        }
+
+        return $this;
     }
 
     /**
-     * Get the GL entries posted as a result of this Debit Note.
+     * Cancel the debit note
      */
-    public function glTransactions(): MorphMany
+    public function cancel(string $reason, ?int $userId = null): self
     {
-        return $this->morphMany(GlTransaction::class, 'reference');
+        if ($this->status === 'posted') {
+            throw new \Exception('Posted debit note cannot be cancelled. Create a reversing entry instead.');
+        }
+
+        $this->status = 'cancelled';
+        $this->rejection_reason = $reason;
+        $this->rejected_by = $userId ?? auth()->id();
+        $this->rejected_at = \Carbon\Carbon::now();
+        $this->save();
+
+        $this->changeStatus('cancelled', $reason);
+
+        return $this;
     }
 
     /**
-     * Get the stock transactions (inventory OUT) posted as a result of this return.
+     * Calculate if debit note exceeds original bill amount
      */
-    public function stockTransactions(): MorphMany
+    public function wouldExceedBillAmount(): bool
     {
-        return $this->morphMany(StockTransaction::class, 'reference');
+        if (!$this->purchase_bill_id) {
+            return false;
+        }
+
+        $totalDebits = DebitNote::where('purchase_bill_id', $this->purchase_bill_id)
+            ->where('status', '!=', 'cancelled')
+            ->where('id', '!=', $this->id)
+            ->sum('grand_total');
+
+        $newTotal = $totalDebits + $this->grand_total;
+
+        return $newTotal > $this->purchaseBill->grand_total;
+    }
+
+    /**
+     * Validate before saving
+     */
+    protected static function booted()
+    {
+        static::creating(function ($debitNote) {
+            if ($debitNote->wouldExceedBillAmount()) {
+                throw new \Exception('Debit note total exceeds the original purchase bill amount');
+            }
+        });
+    }
+
+    /* ======================
+     |  Scopes
+     ====================== */
+
+    public function scopeForPurchaseBill(Builder $query, int $purchaseBillId)
+    {
+        return $query->where('purchase_bill_id', $purchaseBillId);
+    }
+
+    public function scopeUnposted(Builder $query)
+    {
+        return $query->whereNull('journal_id')->where('status', 'approved');
+    }
+
+    /* ======================
+     |  Accessors
+     ====================== */
+
+    public function getRemainingCreditAttribute(): float
+    {
+        if (!$this->purchase_bill_id) {
+            return 0;
+        }
+
+        $usedDebits = DebitNote::where('purchase_bill_id', $this->purchase_bill_id)
+            ->where('status', '!=', 'cancelled')
+            ->sum('grand_total');
+
+        return $this->purchaseBill->grand_total - $usedDebits;
     }
 }
