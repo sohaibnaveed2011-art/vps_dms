@@ -61,27 +61,27 @@ Route::prefix('v1')->group(function () {
         | RBAC (NO CONTEXT REQUIRED)
         ================================================= */
         Route::prefix('rbac')->middleware('ability:auth.*')->group(function () {
+            Route::put('roles/{role}/sync-permissions', [RoleController::class, 'syncPermissions']);
             Route::apiResource('roles', RoleController::class);
             Route::apiResource('permissions', PermissionController::class);
-            Route::put('roles/{role}/sync-permissions', [RoleController::class, 'syncPermissions']);
         });
 
         /* ================================================
          | USERS (SYSTEM / ORG ADMIN) (NO CONTEXT REQUIRED)
          ================================================== */
-        Route::middleware('ability:users.*')->group(function () {
-            Route::apiResource('users', UserController::class);
+        Route::middleware(['ability:user.*'])->group(function () {
             /* Assignment & Context management */
-            Route::apiResource('assignments', UserAssignmentController::class)->only(['index', 'show']);
             Route::post('assignments/{assignment}/revoke', [UserAssignmentController::class, 'revokeRoleAt']);
             Route::get('/active-assignments', [UserAssignmentController::class, 'myActiveAssignments']);
+            Route::apiResource('assignments', UserAssignmentController::class)->only(['index', 'show']);
             // View available contexts
             Route::get('contexts', [UserContextController::class, 'index']);
             Route::get('contexts/{context}', [UserContextController::class, 'show']);
             Route::prefix('users')->group(function () {
                 /* Role assignment at scope */
                 Route::post('{user}/assign-role-at', [UserAssignmentController::class, 'assignRoleAt']);
-            });
+                });
+            Route::apiResource('users', UserController::class);
         });
 
         /* =====================================

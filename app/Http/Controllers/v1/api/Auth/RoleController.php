@@ -62,7 +62,7 @@ class RoleController extends BaseApiController
     public function show(Request $request, int $id)
     {
         $this->authorizeAction($request);
-        $this->ensureAdmin($request);
+        // $this->ensureAdmin($request);
 
         $role = $this->service->find($id) ?? throw new NotFoundException('Role not found.');
 
